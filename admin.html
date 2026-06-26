@@ -1,9 +1,134 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BA Attendance Admin</title><script src="assets/config.js"></script><style>body{margin:0;font-family:Arial,sans-serif;background:#fff5fa;color:#4a2438}header{background:linear-gradient(135deg,#f9a8d4,#ec4899);color:#fff;padding:20px}main{max-width:1200px;margin:auto;padding:18px}.card{background:#fff;border-radius:18px;padding:16px;box-shadow:0 8px 22px #db277722;margin-bottom:14px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}button{border:0;border-radius:12px;padding:11px 14px;background:#db2777;color:#fff;font-weight:700}input,select,textarea{padding:10px;border:1px solid #fbcfe8;border-radius:10px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left}.muted{color:#8b5f74}.hidden{display:none}</style></head><body><header><h2 style="margin:0">BA Attendance Desktop Admin</h2><div>Supabase Edition v2.0.0</div></header><main><div id="login" class="card"><h3>เข้าสู่ระบบ Admin</h3><p class="muted">ใส่ Admin API Key ที่ตั้งใน Supabase Edge Function Secret</p><input id="key" type="password" placeholder="Admin API Key"><button onclick="login()">เข้าสู่ระบบ</button></div><div id="app" class="hidden"><div class="grid"><button onclick="loadEmployees()">Employees</button><button onclick="loadOffices()">Offices</button><button onclick="loadSupervisors()">Supervisors</button><button onclick="loadAudit()">Audit Log</button><button onclick="syncNow()">Sync Google Sheets</button></div><div id="content" class="card" style="margin-top:14px"></div></div></main><script>
-let adminKey='',employees=[],offices=[],supervisors=[];const $=x=>document.getElementById(x);async function api(action,payload={}){const r=await fetch(BA_CONFIG.EDGE_FUNCTION_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':adminKey},body:JSON.stringify({action,payload})});const d=await r.json();if(!r.ok||d.success===false)throw new Error(d.message||'Error');return d}function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function login(){adminKey=$('key').value.trim();sessionStorage.setItem('ba_admin_key',adminKey);api('admin_bootstrap').then(()=>{$('login').classList.add('hidden');$('app').classList.remove('hidden');loadEmployees()}).catch(e=>alert(e.message))}
-async function refs(){if(!offices.length)offices=(await api('admin_list_offices')).rows;if(!supervisors.length)supervisors=(await api('admin_list_supervisors')).rows}
-async function loadEmployees(){await refs();employees=(await api('admin_list_employees')).rows;$('content').innerHTML=`<h3>Employees</h3><div style="overflow:auto"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทร</th><th>Mode</th><th>สาขา</th><th>Supervisor</th><th>ครบ</th><th></th></tr>${employees.map((e,i)=>`<tr><td>${esc(e.employee_code)}</td><td>${esc(e.display_name)}</td><td>${esc(e.phone||'')}</td><td>${esc(e.ba_mode||'')}</td><td>${esc(e.offices?.office_name||'')}</td><td>${esc(e.supervisors?.supervisor_name||'')}</td><td>${e.profile_completed?'✓':'⚠️'}</td><td><button onclick="editEmployee(${i})">แก้</button></td></tr>`).join('')}</table></div>`}
-function editEmployee(i){const e=employees[i],mode=prompt('BA Mode: FIXED_BRANCH / MULTI_BRANCH / STOCK_REFILL',e.ba_mode||'')||e.ba_mode;const phone=prompt('เบอร์โทร',e.phone||'')??e.phone;const line=prompt('LINE User ID',e.line_user_id||'')??e.line_user_id;const officeCode=prompt('Office Code เช่น OFBA01',offices.find(o=>o.id===e.assigned_office_id)?.office_code||'');const supCode=prompt('Supervisor Code เช่น SUP001',supervisors.find(x=>x.id===e.supervisor_id)?.supervisor_code||'');const reason=prompt('เหตุผลการแก้ไข')||'Desktop Admin';const o=offices.find(x=>x.office_code===officeCode),sp=supervisors.find(x=>x.supervisor_code===supCode);api('admin_update_employee',{id:e.id,display_name:e.display_name,full_name:e.full_name,phone,line_user_id:line,ba_mode:mode,assigned_office_id:o?.id||null,supervisor_id:sp?.id||null,active:e.active,reason}).then(loadEmployees).catch(x=>alert(x.message))}
-async function loadOffices(){offices=(await api('admin_list_offices')).rows;$('content').innerHTML=`<h3>Offices</h3><div style="overflow:auto"><table><tr><th>Code</th><th>สาขา</th><th>Region</th><th>GPS</th><th>Radius</th><th></th></tr>${offices.map((o,i)=>`<tr><td>${esc(o.office_code)}</td><td>${esc(o.office_name)}</td><td>${esc(o.region)}</td><td>${o.latitude}, ${o.longitude}</td><td>${o.radius_meters}</td><td><button onclick="editOffice(${i})">แก้</button></td></tr>`).join('')}</table></div>`}function editOffice(i){const o=offices[i],radius=prompt('GPS Radius (เมตร)',o.radius_meters);const region=prompt('Region',o.region);const reason=prompt('เหตุผล')||'Desktop Admin';api('admin_update_office',{...o,radius_meters:Number(radius),region,reason}).then(loadOffices).catch(e=>alert(e.message))}
-async function loadSupervisors(){supervisors=(await api('admin_list_supervisors')).rows;$('content').innerHTML=`<h3>Supervisors</h3><div style="overflow:auto"><table><tr><th>Code</th><th>ชื่อ</th><th>โทร</th><th>LINE User ID</th><th></th></tr>${supervisors.map((x,i)=>`<tr><td>${esc(x.supervisor_code)}</td><td>${esc(x.supervisor_name)}</td><td>${esc(x.phone||'')}</td><td>${esc(x.line_user_id||'')}</td><td><button onclick="editSupervisor(${i})">แก้</button></td></tr>`).join('')}</table></div>`}function editSupervisor(i){const x=supervisors[i],phone=prompt('เบอร์โทร',x.phone||'')??x.phone,line=prompt('LINE User ID',x.line_user_id||'')??x.line_user_id,reason=prompt('เหตุผล')||'Desktop Admin';api('admin_update_supervisor',{id:x.id,supervisor_name:x.supervisor_name,phone,line_user_id:line,active:x.active,reason}).then(loadSupervisors).catch(e=>alert(e.message))}
-async function loadAudit(){const rows=(await api('admin_audit')).rows;$('content').innerHTML=`<h3>Audit Log</h3><div style="overflow:auto"><table><tr><th>เวลา</th><th>Role</th><th>Action</th><th>Entity</th><th>เหตุผล</th></tr>${rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.actor_role)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)} ${esc(x.entity_id||'')}</td><td>${esc(x.reason||'')}</td></tr>`).join('')}</table></div>`}async function syncNow(){alert((await api('admin_sync_now')).message)}window.addEventListener('load',()=>{const k=sessionStorage.getItem('ba_admin_key');if(k){$('key').value=k;login()}})
-</script></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BA Attendance Admin</title>
+<script src="config.js"></script>
+<style>
+:root{--pink:#db2777;--soft:#fff1f7;--line:#fbcfe8;--text:#4a2438;--muted:#8b5f74;--danger:#b91c1c;--ok:#166534}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,"Noto Sans Thai",sans-serif;background:#fff7fb;color:var(--text)}
+header{position:sticky;top:0;z-index:5;background:linear-gradient(135deg,#f9a8d4,#db2777);color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:20px}.wrap{max-width:1500px;margin:auto;padding:16px}.login,.panel{background:#fff;border-radius:18px;padding:16px;box-shadow:0 8px 24px #db27771c;margin-bottom:14px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.tabs{display:flex;gap:8px;overflow:auto;margin-bottom:14px}.tabs button{white-space:nowrap}
+button{border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer;background:#fce7f3;color:#9d174d}
+button.primary{background:var(--pink);color:white}button.danger{background:#fee2e2;color:var(--danger)}button.gray{background:#f3f4f6;color:#374151}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.hidden{display:none!important}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px;vertical-align:top}th{background:#fff1f7;position:sticky;top:0}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#fce7f3}.status{padding:10px;border-radius:10px;margin-bottom:10px}.ok{background:#dcfce7;color:var(--ok)}.err{background:#fee2e2;color:#991b1b}
+.modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;padding:16px;z-index:20}.modal.show{display:flex}
+.sheet{background:#fff;border-radius:18px;width:min(760px,100%);max-height:92vh;overflow:auto;padding:18px}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}header{align-items:flex-start;gap:8px;flex-direction:column}}
+</style>
+</head>
+<body>
+<header><div><h1>BA Attendance — Admin System Management</h1><div style="font-size:12px">เพิ่ม · แก้ไข · ลบ · เปลี่ยน · ตรวจสอบ จากหน้าจอเดียว</div></div><button class="gray" onclick="logout()">ออกจากระบบ</button></header>
+<div class="wrap">
+<section id="loginBox" class="login">
+  <div class="grid">
+    <div class="field"><label>Admin API Key</label><input id="adminKey" type="password" placeholder="กรอก ADMIN_API_KEY"></div>
+    <div style="align-self:end"><button class="primary" onclick="login()">เข้าสู่ระบบ</button></div>
+  </div>
+</section>
+<div id="app" class="hidden">
+  <div id="status"></div>
+  <div class="tabs" id="tabs"></div>
+  <section class="panel">
+    <div class="toolbar">
+      <button class="primary" onclick="createCurrent()">เพิ่มรายการ</button>
+      <button onclick="refreshAll()">รีเฟรช</button>
+      <input id="search" placeholder="ค้นหา..." oninput="render()" style="max-width:300px">
+      <button onclick="sendReport('MIDDAY')">ส่งรายงาน 14:00</button>
+      <button onclick="sendReport('ENDDAY')">ส่งรายงาน 22:00</button>
+    </div>
+    <div id="content"></div>
+  </section>
+</div>
+</div>
+<div id="modal" class="modal"><div class="sheet"><h3 id="modalTitle"></h3><div id="modalBody"></div><div class="actions"><button class="gray" onclick="closeModal()">ยกเลิก</button><button class="primary" id="saveBtn">บันทึก</button></div></div></div>
+<script>
+const $=id=>document.getElementById(id);
+let KEY='',DATA={},current='employees';
+const tabs=[
+ ['employees','พนักงาน BA'],['supervisors','Supervisor'],['offices','สาขา'],['shifts','Shift'],
+ ['schedules','ตารางงาน'],['attendance','Attendance'],['leaves','การลา'],
+ ['daily','สรุปรายวัน'],['monthly','สรุปรายเดือน'],['line_logs','LINE Logs'],['audits','Audit Logs']
+];
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function msg(t,bad=false){$('status').innerHTML=`<div class="status ${bad?'err':'ok'}">${esc(t)}</div>`;setTimeout(()=>{$('status').innerHTML=''},5000)}
+async function api(action,payload={}){
+ const r=await fetch(BA_ADMIN_CONFIG.ADMIN_API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':KEY},body:JSON.stringify({action,payload})});
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok||j.success===false)throw new Error(j.message||'เกิดข้อผิดพลาด');
+ return j;
+}
+async function login(){KEY=$('adminKey').value.trim();if(!KEY)return;localStorage.setItem('ba_admin_key',KEY);try{const r=await api('bootstrap');DATA=r.data;$('loginBox').classList.add('hidden');$('app').classList.remove('hidden');buildTabs();render();}catch(e){msg(e.message,true)}}
+function logout(){localStorage.removeItem('ba_admin_key');location.reload()}
+async function refreshAll(){try{const r=await api('refresh');DATA=r.data;render();msg('อัปเดตข้อมูลแล้ว')}catch(e){msg(e.message,true)}}
+function buildTabs(){$('tabs').innerHTML=tabs.map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('')}
+function switchTab(id){current=id;buildTabs();render()}
+function findName(list,id,key='id',label='display_name'){const x=(list||[]).find(v=>v[key]===id);return x?x[label]||x.office_name||x.supervisor_name||x.shift_name:id||'-'}
+function filterRows(rows){const q=$('search').value.trim().toLowerCase();return !q?rows:rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q))}
+function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`}
+function render(){
+ const rows=filterRows(DATA[current]||[]);
+ if(current==='employees')return $('content').innerHTML=table(['รหัส','ชื่อ','โหมด','สาขา','Supervisor','Shift','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.employee_code)}</td><td>${esc(x.display_name)}</td><td>${esc(x.ba_mode)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.default_shift_id)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='supervisors')return $('content').innerHTML=table(['รหัส','ชื่อ','โทร','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.supervisor_code)}</td><td>${esc(x.supervisor_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='offices')return $('content').innerHTML=table(['รหัส','สาขา','Region','พิกัด','รัศมี','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.office_code)}</td><td>${esc(x.office_name)}</td><td>${esc(x.region)}</td><td>${esc(x.latitude)}, ${esc(x.longitude)}</td><td>${esc(x.radius_meters)} m</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='shifts')return $('content').innerHTML=table(['ID','ชื่อ','เริ่ม','เลิก','งาน','พัก','Grace','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.id)}</td><td>${esc(x.shift_name)}</td><td>${esc(x.start_time)}</td><td>${esc(x.end_time)}</td><td>${esc(x.required_minutes)}</td><td>${esc(x.break_minutes)}</td><td>${esc(x.grace_minutes)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='schedules')return $('content').innerHTML=table(['วันที่','พนักงาน','สถานะ','Shift','นาทีงาน','หมายเหตุ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.work_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.schedule_status)}</td><td>${esc(x.shift_id)}</td><td>${esc(x.required_minutes)}</td><td>${esc(x.note)}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='attendance')return $('content').innerHTML=table(['เวลา','พนักงาน','Event','สาขา','Source','จัดการ'],rows.map(x=>`<tr><td>${esc(new Date(x.occurred_at).toLocaleString('th-TH'))}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.event_type)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.source)}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='leaves')return $('content').innerHTML=table(['วันที่','พนักงาน','ประเภท','เหตุผล','สถานะ','ผู้อนุมัติ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.leave_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.leave_type)}</td><td>${esc(x.reason)}</td><td>${esc(x.status)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='daily')return $('content').innerHTML=table(['วันที่','พนักงาน','สถานะ','Shift','เข้า','ออก','สาย','ทำงาน','ขาด','เกิน','Net'],rows.map(x=>`<tr><td>${esc(x.work_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.status)}</td><td>${esc(x.shift_id)}</td><td>${esc(x.first_in)}</td><td>${esc(x.last_out)}</td><td>${esc(x.late_minutes)}</td><td>${esc(x.credited_minutes)}</td><td>${esc(x.short_minutes)}</td><td>${esc(x.over_minutes)}</td><td>${esc(x.net_minutes)}</td></tr>`));
+ if(current==='monthly')return $('content').innerHTML=table(['เดือน','พนักงาน','วันทำงาน','วันสาย','นาทีสาย','งาน','เติมของ','ขาด','เกิน','Net'],rows.map(x=>`<tr><td>${esc(x.month_start)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.work_days)}</td><td>${esc(x.late_days)}</td><td>${esc(x.late_minutes)}</td><td>${esc(x.work_minutes)}</td><td>${esc(x.refill_minutes)}</td><td>${esc(x.short_minutes)}</td><td>${esc(x.over_minutes)}</td><td>${esc(x.net_minutes)}</td></tr>`));
+ if(current==='line_logs')return $('content').innerHTML=table(['เวลา','วันที่','ประเภท','Supervisor','สถานะ','ข้อความ'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.report_date)}</td><td>${esc(x.report_type)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.status)}</td><td style="white-space:pre-wrap">${esc(x.message)}</td></tr>`));
+ if(current==='audits')return $('content').innerHTML=table(['เวลา','Action','Entity','ID','เหตุผล','ก่อน','หลัง'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)}</td><td>${esc(x.entity_id)}</td><td>${esc(x.reason)}</td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.before_data,null,2))}</pre></details></td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.after_data,null,2))}</pre></details></td></tr>`));
+}
+function buttons(x){return `<button onclick='editRow(${JSON.stringify(x)})'>แก้</button> <button class="danger" onclick='deleteRow(${JSON.stringify(x)})'>ลบ</button>`}
+function createCurrent(){if(['daily','monthly','line_logs','audits'].includes(current))return msg('หน้านี้เป็นข้อมูลสรุป/ประวัติ ไม่เพิ่มโดยตรง',true);editRow({})}
+function opts(list,val,label){return `<option value="">-</option>`+(list||[]).map(x=>`<option value="${x.id}" ${x.id===val?'selected':''}>${esc(x[label]||x.id)}</option>`).join('')}
+function field(id,label,value='',type='text'){return `<div class="field"><label>${label}</label><input id="${id}" type="${type}" value="${esc(value)}"></div>`}
+function select(id,label,html){return `<div class="field"><label>${label}</label><select id="${id}">${html}</select></div>`}
+function reasonField(){return `<div class="field" style="grid-column:1/-1"><label>เหตุผลการเพิ่ม/แก้ไข</label><textarea id="reason" required></textarea></div>`}
+function boolSelect(id,val){return `<option value="true" ${val!==false?'selected':''}>ใช้งาน</option><option value="false" ${val===false?'selected':''}>ปิดใช้งาน</option>`}
+function editRow(x){
+ $('modal').classList.add('show');$('modalTitle').textContent=(x.id?'แก้ไข ':'เพิ่ม ')+tabs.find(t=>t[0]===current)[1];
+ let html='';
+ if(current==='employees')html=`<div class="grid">${field('employee_code','รหัสพนักงาน',x.employee_code)}${field('display_name','ชื่อแสดง',x.display_name)}${field('full_name','ชื่อ-นามสกุล',x.full_name)}${field('phone','โทรศัพท์',x.phone)}${field('line_user_id','LINE User ID',x.line_user_id)}${select('ba_mode','ประเภท BA',['FIXED_BRANCH','MULTI_BRANCH','STOCK_REFILL'].map(v=>`<option ${v===x.ba_mode?'selected':''}>${v}</option>`).join(''))}${select('assigned_office_id','สาขาประจำ',opts(DATA.offices,x.assigned_office_id,'office_name'))}${select('supervisor_id','Supervisor',opts(DATA.supervisors,x.supervisor_id,'supervisor_name'))}${select('default_shift_id','Shift ประจำ',opts(DATA.shifts,x.default_shift_id,'shift_name'))}${select('active','สถานะ',boolSelect('active',x.active))}${field('start_date','วันเริ่มงาน',x.start_date,'date')}${field('end_date','วันสิ้นสุด',x.end_date,'date')}${field('note','หมายเหตุ',x.note)}${reasonField()}</div>`;
+ if(current==='supervisors')html=`<div class="grid">${field('supervisor_code','รหัส',x.supervisor_code)}${field('supervisor_name','ชื่อ',x.supervisor_name)}${field('phone','โทรศัพท์',x.phone)}${field('line_user_id','LINE User ID',x.line_user_id)}${select('active','สถานะ',boolSelect('active',x.active))}${field('note','หมายเหตุ',x.note)}${reasonField()}</div>`;
+ if(current==='offices')html=`<div class="grid">${field('office_code','รหัสสาขา',x.office_code)}${field('office_name','ชื่อสาขา',x.office_name)}${select('region','Region',['กทม กลาง','กทม เหนือ','กทม ตะวันออก','กทม ตะวันตก','ภาคเหนือ','ภาคกลาง','ภาคใต้','ภาคอีสาน','ภาคตะวันออก'].map(v=>`<option ${v===x.region?'selected':''}>${v}</option>`).join(''))}${field('latitude','Latitude',x.latitude,'number')}${field('longitude','Longitude',x.longitude,'number')}${field('radius_meters','รัศมีเมตร',x.radius_meters||100,'number')}${select('active','สถานะ',boolSelect('active',x.active))}${field('note','หมายเหตุ',x.note)}${reasonField()}</div>`;
+ if(current==='shifts')html=`<div class="grid">${field('id','Shift ID',x.id)}${field('shift_name','ชื่อ Shift',x.shift_name)}${field('start_time','เวลาเริ่ม',String(x.start_time||'').slice(0,5),'time')}${field('end_time','เวลาเลิก',String(x.end_time||'').slice(0,5),'time')}${field('required_minutes','นาทีงาน',x.required_minutes||480,'number')}${field('break_minutes','นาทีพัก',x.break_minutes||60,'number')}${field('grace_minutes','Grace นาที',x.grace_minutes||0,'number')}${select('active','สถานะ',boolSelect('active',x.active))}${reasonField()}</div>`;
+ if(current==='schedules')html=`<div class="grid">${select('employee_id','พนักงาน',opts(DATA.employees,x.employee_id,'display_name'))}${field('work_date','วันที่',x.work_date,'date')}${select('schedule_status','สถานะ',['WORK','OFF','SICK_LEAVE','BUSINESS_LEAVE','VACATION'].map(v=>`<option ${v===x.schedule_status?'selected':''}>${v}</option>`).join(''))}${select('shift_id','Shift',opts(DATA.shifts,x.shift_id,'shift_name'))}${field('required_minutes','นาทีงาน',x.required_minutes||480,'number')}${field('note','หมายเหตุ',x.note)}${reasonField()}</div>`;
+ if(current==='attendance'){const d=x.occurred_at?new Date(x.occurred_at):new Date();html=`<div class="grid">${select('employee_id','พนักงาน',opts(DATA.employees,x.employee_id,'display_name'))}${field('date','วันที่',x.occurred_at?d.toISOString().slice(0,10):'','date')}${field('time','เวลา',x.occurred_at?d.toLocaleTimeString('en-GB',{timeZone:'Asia/Bangkok'}).slice(0,5):'','time')}${select('event_type','Event',['IN','OUT','BREAK_OUT','BREAK_IN','DAY_IN','DAY_OUT','BRANCH_IN','BRANCH_OUT','WORK_IN','WORK_OUT','REFILL_IN','REFILL_OUT'].map(v=>`<option ${v===x.event_type?'selected':''}>${v}</option>`).join(''))}${select('office_id','สาขา',opts(DATA.offices,x.office_id,'office_name'))}${reasonField()}</div>`}
+ if(current==='leaves')html=`<div class="grid">${select('employee_id','พนักงาน',opts(DATA.employees,x.employee_id,'display_name'))}${field('leave_date','วันที่ลา',x.leave_date,'date')}${select('leave_type','ประเภท',['SICK_LEAVE','BUSINESS_LEAVE','VACATION'].map(v=>`<option ${v===x.leave_type?'selected':''}>${v}</option>`).join(''))}${field('leave_reason','เหตุผลการลา',x.reason)}${select('status','สถานะ',['PENDING','APPROVED','REJECTED'].map(v=>`<option ${v===x.status?'selected':''}>${v}</option>`).join(''))}${select('reviewed_by','ผู้อนุมัติ',opts(DATA.supervisors,x.reviewed_by,'supervisor_name'))}${field('reviewer_note','หมายเหตุผู้อนุมัติ',x.reviewer_note)}${reasonField()}</div>`;
+ $('modalBody').innerHTML=html;
+ $('saveBtn').onclick=()=>saveRow(x.id||null);
+}
+function val(id){const e=$(id);return e?e.value:null}
+async function saveRow(id){
+ try{
+  let p={id,reason:val('reason')};
+  document.querySelectorAll('#modalBody input,#modalBody select,#modalBody textarea').forEach(e=>{if(e.id&&e.id!=='reason')p[e.id]=e.value});
+  if('active' in p)p.active=p.active==='true';
+  const map={employees:'save_employee',supervisors:'save_supervisor',offices:'save_office',shifts:'save_shift',schedules:'save_schedule',attendance:'save_attendance',leaves:'save_leave'};
+  await api(map[current],p);closeModal();await refreshAll();msg('บันทึกแล้ว');
+ }catch(e){msg(e.message,true)}
+}
+async function deleteRow(x){
+ if(!confirm('ยืนยันลบรายการนี้?'))return;
+ const reason=prompt('เหตุผลการลบ');if(!reason)return;
+ const map={employees:'delete_employee',supervisors:'delete_supervisor',offices:'delete_office',shifts:'delete_shift',schedules:'delete_schedule',attendance:'delete_attendance',leaves:'delete_leave'};
+ try{await api(map[current],{id:x.id,reason});await refreshAll();msg('ลบแล้ว')}catch(e){msg(e.message,true)}
+}
+async function sendReport(type){
+ const date=prompt('วันที่รายงาน YYYY-MM-DD',new Date().toISOString().slice(0,10));if(!date)return;
+ const reason=prompt('เหตุผลการส่งรายงาน','ส่งจาก Admin');
+ try{const r=await api('send_line_report',{type,date,reason});msg(`ส่งรายงานสำเร็จ ${r.result.sent||0} Supervisor`);await refreshAll()}catch(e){msg(e.message,true)}
+}
+function closeModal(){$('modal').classList.remove('show')}
+window.addEventListener('load',()=>{const k=localStorage.getItem('ba_admin_key');if(k){$('adminKey').value=k;login()}});
+</script>
+</body>
+</html>
