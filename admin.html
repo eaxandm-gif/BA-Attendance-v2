@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BA Attendance Admin</title>
-<script src="admin-config.js?v=2.4.0"></script>
+<script src="admin-config.js?v=2.6.0"></script>
 <style>
 :root{--pink:#db2777;--soft:#fff1f7;--line:#fbcfe8;--text:#4a2438;--muted:#8b5f74;--danger:#b91c1c;--ok:#166534}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,"Noto Sans Thai",sans-serif;background:#fff7fb;color:var(--text)}
@@ -17,8 +17,8 @@ input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);borde
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
 .hidden{display:none!important}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{border-collapse:collapse;width:100%;min-width:900px}
 th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px;vertical-align:top}th{background:#fff1f7;position:sticky;top:0}
-.schedule-grid th,.schedule-grid td{text-align:center;min-width:54px}.schedule-grid .emp{text-align:left;position:sticky;left:0;background:#fff;z-index:2;min-width:170px}.schedule-cell{cursor:pointer;border-radius:8px;padding:5px 3px;line-height:1.2}.schedule-cell.work{background:#fce7f3}.schedule-cell.off{background:#f3f4f6}.schedule-cell.leave{background:#fef3c7}.schedule-cell.empty{background:#fff;border:1px dashed #fbcfe8;color:#aaa}
-.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#fce7f3}.status{padding:10px;border-radius:10px;margin-bottom:10px}.ok{background:#dcfce7;color:var(--ok)}.err{background:#fee2e2;color:#991b1b}
+.schedule-grid th,.schedule-grid td{text-align:center;min-width:54px}.schedule-grid .emp{text-align:left;position:sticky;left:0;background:#fff;z-index:2;min-width:170px}.schedule-cell{cursor:pointer;border-radius:8px;padding:5px 3px;line-height:1.2}.schedule-cell.work{background:#fce7f3}.schedule-cell.off{background:#f3f4f6}.schedule-cell.leave{background:#fef3c7}.schedule-cell.empty{background:#fff;border:1px dashed #fbcfe8;color:#aaa}.schedule-cell.default{background:#fff7fb;border:1px solid #f9a8d4}.schedule-cell.selected{outline:3px solid #db2777;outline-offset:-2px}.schedule-grid-wrap.editing{padding-bottom:120px}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#fce7f3}.summary-kpis{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:8px;margin-bottom:12px}.summary-kpi{background:#fff7fb;border:1px solid #fbcfe8;border-radius:12px;padding:10px}.summary-kpi strong{display:block;font-size:20px;color:#be185d}.late{color:#b91c1c;font-weight:700}.ontime{color:#166534;font-weight:700}@media(max-width:900px){.summary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}.status{padding:10px;border-radius:10px;margin-bottom:10px}.ok{background:#dcfce7;color:var(--ok)}.err{background:#fee2e2;color:#991b1b}
 .modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;padding:16px;z-index:20}.modal.show{display:flex}
 .sheet{background:#fff;border-radius:18px;width:min(760px,100%);max-height:92vh;overflow:auto;padding:18px}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 @media(max-width:700px){.grid{grid-template-columns:1fr}header{align-items:flex-start;gap:8px;flex-direction:column}}
@@ -40,10 +40,13 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
   <section class="panel">
     <div class="toolbar">
       <button class="primary" onclick="createCurrent()">เพิ่มรายการ</button>
-      <button id="bulkScheduleBtn" class="hidden" onclick="openBulkSchedule()">จัด Shift แบบช่วงวัน</button>
+      <button id="bulkScheduleBtn" class="hidden" onclick="toggleScheduleEditMode()">เลือกหลายคน/หลายวัน</button>
       <button onclick="refreshAll()">รีเฟรช</button>
       <input id="search" placeholder="ค้นหา..." oninput="render()" style="max-width:300px">
       <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
+      <input id="dailyDate" class="hidden" type="date" onchange="render()" style="max-width:180px">
+      <input id="monthlyMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
+      <button id="exportSummaryBtn" class="hidden" onclick="exportCurrentSummary()">ดาวน์โหลด CSV</button>
       <button onclick="sendReport('MIDDAY')">ส่งรายงาน 14:00</button>
       <button onclick="sendReport('ENDDAY')">ส่งรายงาน 22:00</button>
     </div>
@@ -51,10 +54,29 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
   </section>
 </div>
 </div>
+<div id="scheduleSaveBar" class="hidden" style="position:fixed;left:0;right:0;bottom:0;z-index:12;background:#fff;border-top:1px solid #fbcfe8;box-shadow:0 -8px 24px #0001;padding:12px">
+  <div style="max-width:1500px;margin:auto;display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+    <div class="field" style="min-width:180px;margin:0"><label>สถานะ</label>
+      <select id="multiStatus" onchange="toggleMultiShift()">
+        <option value="WORK">WORK</option>
+        <option value="OFF">OFF</option>
+        <option value="SICK_LEAVE">SICK_LEAVE</option>
+        <option value="BUSINESS_LEAVE">BUSINESS_LEAVE</option>
+        <option value="VACATION">VACATION</option>
+      </select>
+    </div>
+    <div class="field" id="multiShiftWrap" style="min-width:180px;margin:0"><label>Shift</label><select id="multiShift"></select></div>
+    <div class="field" style="width:140px;margin:0"><label>นาทีงาน</label><input id="multiMinutes" type="number" value="480"></div>
+    <div class="field" style="min-width:220px;flex:1;margin:0"><label>หมายเหตุ</label><input id="multiNote"></div>
+    <div><span id="selectedCount" class="badge">เลือก 0 ช่อง</span></div>
+    <button class="gray" onclick="clearSelectedScheduleCells()">ล้างที่เลือก</button>
+    <button class="primary" onclick="saveSelectedScheduleCells()">บันทึกทั้งหมด</button>
+  </div>
+</div>
 <div id="modal" class="modal"><div class="sheet"><h3 id="modalTitle"></h3><div id="modalBody"></div><div class="actions"><button class="gray" onclick="closeModal()">ยกเลิก</button><button class="primary" id="saveBtn">บันทึก</button></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
-let KEY='',DATA={},current='employees';
+let KEY='',DATA={},current='employees',selectedScheduleCells=new Set(),scheduleEditMode=false;
 const tabs=[
  ['employees','พนักงาน BA'],['supervisors','Supervisor'],['offices','สาขา'],['shifts','Shift'],
  ['schedules','ตารางงาน'],['attendance','Attendance'],['leaves','การลา'],
@@ -122,41 +144,322 @@ function renderScheduleOverview(){
    const cells=[];
    for(let day=1;day<=total;day++){
      const date=`${month}-${String(day).padStart(2,'0')}`;
-     const s=map.get(`${emp.id}:${date}`);
+     const key=`${emp.id}:${date}`;
+     const s=map.get(key);
      let label='–', cls='empty', title='ยังไม่กำหนด';
      if(s){
        if(s.schedule_status==='WORK'){
-         label=esc(s.shift_id||'WORK'); cls='work'; title=`${s.shift_id||'WORK'} · ${s.required_minutes||0} นาที`;
+         label=esc(s.shift_id||emp.default_shift_id||'WORK'); cls='work'; title=`${s.shift_id||emp.default_shift_id||'WORK'} · ${s.required_minutes||0} นาที`;
        }else if(s.schedule_status==='OFF'){
          label='OFF'; cls='off'; title='วันหยุด';
        }else{
          label=esc(s.schedule_status); cls='leave'; title=s.schedule_status;
        }
+     }else if(emp.default_shift_id){
+       label=esc(emp.default_shift_id); cls='default'; title=`Default Shift: ${emp.default_shift_id}`;
      }
-     const payload=s?JSON.stringify(s).replace(/'/g,'&#39;'):JSON.stringify({employee_id:emp.id,work_date:date,schedule_status:'WORK',required_minutes:480});
-     cells.push(`<td><div class="schedule-cell ${cls}" title="${esc(title)}" onclick='editRow(${payload})'>${label}</div></td>`);
+     if(selectedScheduleCells.has(key)) cls+=' selected';
+     const payload=s?JSON.stringify(s).replace(/'/g,'&#39;'):JSON.stringify({
+       employee_id:emp.id,
+       work_date:date,
+       schedule_status:'WORK',
+       shift_id:emp.default_shift_id||'',
+       required_minutes:480
+     });
+     const click=scheduleEditMode
+       ? `toggleScheduleCell('${emp.id}','${date}')`
+       : `editRow(${payload})`;
+     cells.push(`<td><div class="schedule-cell ${cls}" title="${esc(title)}" onclick="${click}">${label}</div></td>`);
    }
-   return `<tr><td class="emp"><b>${esc(emp.employee_code)}</b><br>${esc(emp.display_name)}</td>${cells.join('')}</tr>`;
+   return `<tr><td class="emp"><b>${esc(emp.employee_code)}</b><br>${esc(emp.display_name)}<br><span class="muted">Default: ${esc(emp.default_shift_id||'-')}</span></td>${cells.join('')}</tr>`;
  });
- $('content').innerHTML=`<div class="muted" style="margin-bottom:8px">คลิกช่องวันที่เพื่อแก้รายวัน หรือใช้ “จัด Shift แบบช่วงวัน” เพื่อเปลี่ยนหลายวันพร้อมกัน</div><div class="table-wrap"><table class="schedule-grid"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+ $('content').innerHTML=`<div class="muted" style="margin-bottom:8px">${scheduleEditMode?'คลิกหลายช่องเพื่อเลือก แล้วกด “บันทึกทั้งหมด” ด้านล่าง':'คลิกช่องวันที่เพื่อแก้รายวัน หรือกด “เลือกหลายคน/หลายวัน” เพื่อแก้หลายช่องพร้อมกัน'}</div><div class="table-wrap schedule-grid-wrap ${scheduleEditMode?'editing':''}"><table class="schedule-grid"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+
+function bangkokDateKey(value){
+ const d=value instanceof Date?value:new Date(value);
+ return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+}
+function bangkokTime(value){
+ const d=value instanceof Date?value:new Date(value);
+ return new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
+}
+function minutesOfDayFromHHMM(v){
+ if(!v)return null;
+ const [h,m]=String(v).slice(0,5).split(':').map(Number);
+ return Number.isFinite(h)&&Number.isFinite(m)?h*60+m:null;
+}
+function eventMinutes(e){
+ const t=bangkokTime(e.occurred_at);
+ return minutesOfDayFromHHMM(t);
+}
+function durationBetween(start,end){
+ if(start==null||end==null)return 0;
+ return end>=start?end-start:(end+1440)-start;
+}
+function pairDuration(events,inType,outType){
+ const sorted=events.filter(e=>e.event_type===inType||e.event_type===outType).sort((a,b)=>new Date(a.occurred_at)-new Date(b.occurred_at));
+ let open=null,total=0;
+ for(const e of sorted){
+   const m=eventMinutes(e);
+   if(e.event_type===inType&&open==null)open=m;
+   if(e.event_type===outType&&open!=null){total+=durationBetween(open,m);open=null}
+ }
+ return total;
+}
+function summaryForEmployeeDate(emp,date){
+ const schedule=(DATA.schedules||[]).find(s=>s.employee_id===emp.id&&s.work_date===date);
+ const approvedLeave=(DATA.leaves||[]).find(l=>l.employee_id===emp.id&&l.leave_date===date&&l.status==='APPROVED');
+ const shiftId=schedule?.shift_id||emp.default_shift_id||null;
+ const shift=(DATA.shifts||[]).find(s=>s.id===shiftId)||null;
+ const scheduleStatus=approvedLeave?.leave_type||schedule?.schedule_status||'WORK';
+ const events=(DATA.attendance||[])
+   .filter(e=>e.employee_id===emp.id&&bangkokDateKey(e.occurred_at)===date)
+   .sort((a,b)=>new Date(a.occurred_at)-new Date(b.occurred_at));
+
+ let startType='IN',endType='OUT';
+ if(emp.ba_mode==='MULTI_BRANCH'){startType='DAY_IN';endType='DAY_OUT'}
+ if(emp.ba_mode==='STOCK_REFILL'){startType='WORK_IN';endType='WORK_OUT'}
+
+ const starts=events.filter(e=>e.event_type===startType);
+ const ends=events.filter(e=>e.event_type===endType);
+ const firstStart=starts[0]||null;
+ const lastEnd=ends.length?ends[ends.length-1]:null;
+ const startMin=firstStart?eventMinutes(firstStart):null;
+ const endMin=lastEnd?eventMinutes(lastEnd):null;
+ const breakMinutes=pairDuration(events,'BREAK_OUT','BREAK_IN');
+ const refillMinutes=pairDuration(events,'REFILL_IN','REFILL_OUT');
+ let creditedMinutes=0;
+ if(startMin!=null&&endMin!=null)creditedMinutes=Math.max(0,durationBetween(startMin,endMin)-breakMinutes);
+
+ const shiftStart=minutesOfDayFromHHMM(shift?.start_time);
+ const grace=Number(shift?.grace_minutes||0);
+ const lateMinutes=(startMin!=null&&shiftStart!=null)?Math.max(0,startMin-shiftStart-grace):0;
+ const requiredMinutes=Number(schedule?.required_minutes||shift?.required_minutes||480);
+ const shortMinutes=(scheduleStatus==='WORK'&&startMin!=null&&endMin!=null)?Math.max(0,requiredMinutes-creditedMinutes):0;
+ const overMinutes=(scheduleStatus==='WORK'&&startMin!=null&&endMin!=null)?Math.max(0,creditedMinutes-requiredMinutes):0;
+ const netMinutes=overMinutes-shortMinutes;
+
+ let status=scheduleStatus;
+ if(scheduleStatus==='WORK'){
+   if(startMin==null)status='NOT_STARTED';
+   else if(endMin==null)status='WORKING';
+   else status='COMPLETED';
+ }
+
+ const officeNames=[...new Set(events.map(e=>e.offices?.office_name).filter(Boolean))];
+
+ return {
+   work_date:date,
+   employee_id:emp.id,
+   employee_code:emp.employee_code,
+   display_name:emp.display_name,
+   supervisor_name:emp.supervisors?.supervisor_name||'',
+   ba_mode:emp.ba_mode||'',
+   status,
+   shift_id:shiftId||'',
+   shift_name:shift?.shift_name||shiftId||'',
+   shift_start:shift?.start_time?String(shift.start_time).slice(0,5):'',
+   shift_end:shift?.end_time?String(shift.end_time).slice(0,5):'',
+   first_in:firstStart?bangkokTime(firstStart.occurred_at):'',
+   last_out:lastEnd?bangkokTime(lastEnd.occurred_at):'',
+   late_minutes:lateMinutes,
+   credited_minutes:creditedMinutes,
+   break_minutes:breakMinutes,
+   refill_minutes:refillMinutes,
+   required_minutes:requiredMinutes,
+   short_minutes:shortMinutes,
+   over_minutes:overMinutes,
+   net_minutes:netMinutes,
+   offices:officeNames.join(', '),
+   has_events:events.length>0
+ };
+}
+function buildDailySummary(date){
+ return (DATA.employees||[])
+   .filter(e=>e.active!==false)
+   .map(e=>summaryForEmployeeDate(e,date));
+}
+function relevantDatesForEmployeeMonth(emp,month){
+ const set=new Set();
+ (DATA.schedules||[]).filter(s=>s.employee_id===emp.id&&String(s.work_date||'').startsWith(month)).forEach(s=>set.add(s.work_date));
+ (DATA.leaves||[]).filter(l=>l.employee_id===emp.id&&String(l.leave_date||'').startsWith(month)&&l.status==='APPROVED').forEach(l=>set.add(l.leave_date));
+ (DATA.attendance||[]).filter(a=>a.employee_id===emp.id&&bangkokDateKey(a.occurred_at).startsWith(month)).forEach(a=>set.add(bangkokDateKey(a.occurred_at)));
+ return [...set].sort();
+}
+function buildMonthlySummary(month){
+ return (DATA.employees||[]).filter(e=>e.active!==false).map(emp=>{
+   const dates=relevantDatesForEmployeeMonth(emp,month);
+   const rows=dates.map(d=>summaryForEmployeeDate(emp,d));
+   return {
+     month,
+     employee_code:emp.employee_code,
+     display_name:emp.display_name,
+     supervisor_name:emp.supervisors?.supervisor_name||'',
+     work_days:rows.filter(r=>['COMPLETED','WORKING'].includes(r.status)).length,
+     completed_days:rows.filter(r=>r.status==='COMPLETED').length,
+     late_days:rows.filter(r=>r.late_minutes>0).length,
+     late_minutes:rows.reduce((a,r)=>a+r.late_minutes,0),
+     sick_leave_days:rows.filter(r=>r.status==='SICK_LEAVE').length,
+     business_leave_days:rows.filter(r=>r.status==='BUSINESS_LEAVE').length,
+     vacation_days:rows.filter(r=>r.status==='VACATION').length,
+     off_days:rows.filter(r=>r.status==='OFF').length,
+     not_started_days:rows.filter(r=>r.status==='NOT_STARTED').length,
+     work_minutes:rows.reduce((a,r)=>a+r.credited_minutes,0),
+     refill_minutes:rows.reduce((a,r)=>a+r.refill_minutes,0),
+     short_minutes:rows.reduce((a,r)=>a+r.short_minutes,0),
+     over_minutes:rows.reduce((a,r)=>a+r.over_minutes,0),
+     net_minutes:rows.reduce((a,r)=>a+r.net_minutes,0),
+     source_days:rows.length
+   };
+ });
+}
+function fmtMinutes(v){
+ const n=Math.round(Number(v||0));
+ const sign=n<0?'-':'';
+ const a=Math.abs(n);
+ return `${sign}${Math.floor(a/60)}:${String(a%60).padStart(2,'0')}`;
+}
+function renderDailySummary(){
+ const date=$('dailyDate').value||bangkokDateKey(new Date());
+ const q=$('search').value.trim().toLowerCase();
+ const rows=buildDailySummary(date).filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q));
+ window.__currentSummaryRows=rows;
+ const k={
+  total:rows.length,
+  completed:rows.filter(r=>r.status==='COMPLETED').length,
+  working:rows.filter(r=>r.status==='WORKING').length,
+  late:rows.filter(r=>r.late_minutes>0).length,
+  notStarted:rows.filter(r=>r.status==='NOT_STARTED').length,
+  leave:rows.filter(r=>['SICK_LEAVE','BUSINESS_LEAVE','VACATION','OFF'].includes(r.status)).length
+ };
+ const kpis=`<div class="summary-kpis">
+  <div class="summary-kpi">พนักงาน<strong>${k.total}</strong></div>
+  <div class="summary-kpi">ออกงานแล้ว<strong>${k.completed}</strong></div>
+  <div class="summary-kpi">กำลังทำงาน<strong>${k.working}</strong></div>
+  <div class="summary-kpi">มาสาย<strong>${k.late}</strong></div>
+  <div class="summary-kpi">ยังไม่เข้างาน<strong>${k.notStarted}</strong></div>
+  <div class="summary-kpi">หยุด/ลา<strong>${k.leave}</strong></div>
+ </div>`;
+ const body=table(
+  ['วันที่','พนักงาน','Supervisor','สถานะ','Shift','เวลา Shift','เข้า','ออก','สาย','ทำงาน','พัก','เติมของ','ขาด','เกิน','Net','สาขา'],
+  rows.map(r=>`<tr>
+   <td>${esc(r.work_date)}</td>
+   <td><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>
+   <td>${esc(r.supervisor_name)}</td>
+   <td>${esc(r.status)}</td>
+   <td>${esc(r.shift_name||r.shift_id)}</td>
+   <td>${esc(r.shift_start)}–${esc(r.shift_end)}</td>
+   <td>${esc(r.first_in||'-')}</td>
+   <td>${esc(r.last_out||'-')}</td>
+   <td class="${r.late_minutes>0?'late':'ontime'}">${r.late_minutes>0?`${r.late_minutes} นาที`:'ตรงเวลา'}</td>
+   <td>${fmtMinutes(r.credited_minutes)}</td>
+   <td>${fmtMinutes(r.break_minutes)}</td>
+   <td>${fmtMinutes(r.refill_minutes)}</td>
+   <td>${fmtMinutes(r.short_minutes)}</td>
+   <td>${fmtMinutes(r.over_minutes)}</td>
+   <td>${fmtMinutes(r.net_minutes)}</td>
+   <td>${esc(r.offices||'-')}</td>
+  </tr>`)
+ );
+ $('content').innerHTML=kpis+body;
+}
+function renderMonthlySummary(){
+ const month=$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7);
+ const q=$('search').value.trim().toLowerCase();
+ const rows=buildMonthlySummary(month).filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q));
+ window.__currentSummaryRows=rows;
+ const k={
+   employees:rows.length,
+   workDays:rows.reduce((a,r)=>a+r.work_days,0),
+   lateDays:rows.reduce((a,r)=>a+r.late_days,0),
+   lateMinutes:rows.reduce((a,r)=>a+r.late_minutes,0),
+   short:rows.reduce((a,r)=>a+r.short_minutes,0),
+   over:rows.reduce((a,r)=>a+r.over_minutes,0)
+ };
+ const kpis=`<div class="summary-kpis">
+  <div class="summary-kpi">พนักงาน<strong>${k.employees}</strong></div>
+  <div class="summary-kpi">วันทำงานรวม<strong>${k.workDays}</strong></div>
+  <div class="summary-kpi">วันสายรวม<strong>${k.lateDays}</strong></div>
+  <div class="summary-kpi">นาทีสายรวม<strong>${k.lateMinutes}</strong></div>
+  <div class="summary-kpi">เวลาขาดรวม<strong>${fmtMinutes(k.short)}</strong></div>
+  <div class="summary-kpi">เวลาเกินรวม<strong>${fmtMinutes(k.over)}</strong></div>
+ </div>`;
+ const body=table(
+  ['เดือน','พนักงาน','Supervisor','วันทำงาน','จบงาน','วันสาย','นาทีสาย','ไม่เข้างาน','OFF','ลาป่วย','ลากิจ','ลาพักร้อน','ทำงาน','เติมของ','ขาด','เกิน','Net'],
+  rows.map(r=>`<tr>
+   <td>${esc(r.month)}</td>
+   <td><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>
+   <td>${esc(r.supervisor_name)}</td>
+   <td>${r.work_days}</td>
+   <td>${r.completed_days}</td>
+   <td>${r.late_days}</td>
+   <td>${r.late_minutes}</td>
+   <td>${r.not_started_days}</td>
+   <td>${r.off_days}</td>
+   <td>${r.sick_leave_days}</td>
+   <td>${r.business_leave_days}</td>
+   <td>${r.vacation_days}</td>
+   <td>${fmtMinutes(r.work_minutes)}</td>
+   <td>${fmtMinutes(r.refill_minutes)}</td>
+   <td>${fmtMinutes(r.short_minutes)}</td>
+   <td>${fmtMinutes(r.over_minutes)}</td>
+   <td>${fmtMinutes(r.net_minutes)}</td>
+  </tr>`)
+ );
+ $('content').innerHTML=kpis+body;
+}
+function csvEscape(v){
+ const s=String(v??'');
+ return `"${s.replace(/"/g,'""')}"`;
+}
+function exportCurrentSummary(){
+ const rows=window.__currentSummaryRows||[];
+ if(!rows.length)return msg('ไม่มีข้อมูลสำหรับดาวน์โหลด',true);
+ const headers=Object.keys(rows[0]);
+ const csv=[headers.map(csvEscape).join(','),...rows.map(r=>headers.map(h=>csvEscape(r[h])).join(','))].join('\n');
+ const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ const suffix=current==='daily'?($('dailyDate').value||'daily'):($('monthlyMonth').value||'monthly');
+ a.download=`BA_${current}_${suffix}.csv`;
+ a.click();
+ URL.revokeObjectURL(a.href);
 }
 function render(){
  $('bulkScheduleBtn').classList.toggle('hidden',current!=='schedules');
  $('scheduleMonth').classList.toggle('hidden',current!=='schedules');
+ $('dailyDate').classList.toggle('hidden',current!=='daily');
+ $('monthlyMonth').classList.toggle('hidden',current!=='monthly');
+ $('exportSummaryBtn').classList.toggle('hidden',!['daily','monthly'].includes(current));
+
  if(current==='schedules'){
    if(!$('scheduleMonth').value)$('scheduleMonth').value=new Date().toISOString().slice(0,7);
+   $('scheduleSaveBar').classList.toggle('hidden',!scheduleEditMode);
    return renderScheduleOverview();
+ }else{
+   scheduleEditMode=false;
+   selectedScheduleCells.clear();
+   $('scheduleSaveBar').classList.add('hidden');
  }
+
+ if(current==='daily'){
+   if(!$('dailyDate').value)$('dailyDate').value=bangkokDateKey(new Date());
+   return renderDailySummary();
+ }
+
+ if(current==='monthly'){
+   if(!$('monthlyMonth').value)$('monthlyMonth').value=bangkokDateKey(new Date()).slice(0,7);
+   return renderMonthlySummary();
+ }
+
  const rows=filterRows(DATA[current]||[]);
  if(current==='employees')return $('content').innerHTML=table(['รหัส','ชื่อ','โหมด','สาขา','Supervisor','Shift','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.employee_code)}</td><td>${esc(x.display_name)}</td><td>${esc(x.ba_mode)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.default_shift_id)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
  if(current==='supervisors')return $('content').innerHTML=table(['รหัส','ชื่อ','โทร','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.supervisor_code)}</td><td>${esc(x.supervisor_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
  if(current==='offices')return $('content').innerHTML=table(['รหัส','สาขา','Region','พิกัด','รัศมี','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.office_code)}</td><td>${esc(x.office_name)}</td><td>${esc(x.region)}</td><td>${esc(x.latitude)}, ${esc(x.longitude)}</td><td>${esc(x.radius_meters)} m</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
  if(current==='shifts')return $('content').innerHTML=table(['ID','ชื่อ','เริ่ม','เลิก','งาน','พัก','Grace','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.id)}</td><td>${esc(x.shift_name)}</td><td>${esc(x.start_time)}</td><td>${esc(x.end_time)}</td><td>${esc(x.required_minutes)}</td><td>${esc(x.break_minutes)}</td><td>${esc(x.grace_minutes)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
- if(current==='schedules')return $('content').innerHTML=table(['วันที่','พนักงาน','สถานะ','Shift','นาทีงาน','หมายเหตุ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.work_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.schedule_status)}</td><td>${esc(x.shift_id)}</td><td>${esc(x.required_minutes)}</td><td>${esc(x.note)}</td><td>${buttons(x)}</td></tr>`));
  if(current==='attendance')return $('content').innerHTML=table(['เวลา','พนักงาน','Event','สาขา','Source','จัดการ'],rows.map(x=>`<tr><td>${esc(new Date(x.occurred_at).toLocaleString('th-TH'))}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.event_type)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.source)}</td><td>${buttons(x)}</td></tr>`));
  if(current==='leaves')return $('content').innerHTML=table(['วันที่','พนักงาน','ประเภท','เหตุผล','สถานะ','ผู้อนุมัติ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.leave_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.leave_type)}</td><td>${esc(x.reason)}</td><td>${esc(x.status)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${buttons(x)}</td></tr>`));
- if(current==='daily')return $('content').innerHTML=table(['วันที่','พนักงาน','สถานะ','Shift','เข้า','ออก','สาย','ทำงาน','ขาด','เกิน','Net'],rows.map(x=>`<tr><td>${esc(x.work_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.status)}</td><td>${esc(x.shift_id)}</td><td>${esc(x.first_in)}</td><td>${esc(x.last_out)}</td><td>${esc(x.late_minutes)}</td><td>${esc(x.credited_minutes)}</td><td>${esc(x.short_minutes)}</td><td>${esc(x.over_minutes)}</td><td>${esc(x.net_minutes)}</td></tr>`));
- if(current==='monthly')return $('content').innerHTML=table(['เดือน','พนักงาน','วันทำงาน','วันสาย','นาทีสาย','งาน','เติมของ','ขาด','เกิน','Net'],rows.map(x=>`<tr><td>${esc(x.month_start)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.work_days)}</td><td>${esc(x.late_days)}</td><td>${esc(x.late_minutes)}</td><td>${esc(x.work_minutes)}</td><td>${esc(x.refill_minutes)}</td><td>${esc(x.short_minutes)}</td><td>${esc(x.over_minutes)}</td><td>${esc(x.net_minutes)}</td></tr>`));
  if(current==='line_logs')return $('content').innerHTML=table(['วันที่','ประเภท','Supervisor','สถานะ','ข้อความ','Error'],rows.map(x=>`<tr><td>${esc(x.report_date)}</td><td>${esc(x.report_type)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.status)}</td><td style="white-space:pre-wrap">${esc(x.message)}</td><td>${esc(x.error)}</td></tr>`));
  if(current==='audits')return $('content').innerHTML=table(['เวลา','Action','Entity','ID','เหตุผล','ก่อน','หลัง'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)}</td><td>${esc(x.entity_id)}</td><td>${esc(x.reason)}</td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.before_data,null,2))}</pre></details></td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.after_data,null,2))}</pre></details></td></tr>`));
 }
@@ -200,6 +503,59 @@ async function sendReport(type){
  const date=prompt('วันที่รายงาน YYYY-MM-DD',new Date().toISOString().slice(0,10));if(!date)return;
  const reason=prompt('เหตุผลการส่งรายงาน','ส่งจาก Admin');
  try{const r=await api('send_line_report',{type,date,reason});msg(`ส่งรายงานสำเร็จ ${r.result.sent||0} Supervisor`);await refreshAll()}catch(e){msg(e.message,true)}
+}
+function toggleScheduleEditMode(){
+ scheduleEditMode=!scheduleEditMode;
+ if(!scheduleEditMode)selectedScheduleCells.clear();
+ $('bulkScheduleBtn').textContent=scheduleEditMode?'ยกเลิกโหมดเลือก':'เลือกหลายคน/หลายวัน';
+ const shiftOptions=`<option value="">-</option>`+(DATA.shifts||[]).filter(s=>s.active!==false).map(s=>`<option value="${s.id}">${esc(s.shift_name||s.id)}</option>`).join('');
+ $('multiShift').innerHTML=shiftOptions;
+ $('scheduleSaveBar').classList.toggle('hidden',!scheduleEditMode);
+ updateSelectedCount();
+ renderScheduleOverview();
+}
+function toggleScheduleCell(employeeId,workDate){
+ const key=`${employeeId}:${workDate}`;
+ if(selectedScheduleCells.has(key))selectedScheduleCells.delete(key);else selectedScheduleCells.add(key);
+ updateSelectedCount();
+ renderScheduleOverview();
+}
+function clearSelectedScheduleCells(){
+ selectedScheduleCells.clear();
+ updateSelectedCount();
+ renderScheduleOverview();
+}
+function updateSelectedCount(){
+ $('selectedCount').textContent=`เลือก ${selectedScheduleCells.size} ช่อง`;
+}
+function toggleMultiShift(){
+ $('multiShiftWrap').classList.toggle('hidden',$('multiStatus').value!=='WORK');
+}
+async function saveSelectedScheduleCells(){
+ try{
+   if(!selectedScheduleCells.size)throw new Error('กรุณาเลือกอย่างน้อย 1 ช่อง');
+   const reason=prompt('เหตุผลการเปลี่ยน Shift/ตารางงานทั้งหมด');
+   if(!reason)return;
+   const cells=Array.from(selectedScheduleCells).map(k=>{
+     const [employee_id,work_date]=k.split(':');
+     return {employee_id,work_date};
+   });
+   const payload={
+     cells,
+     schedule_status:$('multiStatus').value,
+     shift_id:$('multiStatus').value==='WORK' ? $('multiShift').value : null,
+     required_minutes:Number($('multiMinutes').value||480),
+     note:$('multiNote').value,
+     reason
+   };
+   const r=await api('bulk_save_schedule_cells',payload);
+   selectedScheduleCells.clear();
+   scheduleEditMode=false;
+   $('bulkScheduleBtn').textContent='เลือกหลายคน/หลายวัน';
+   $('scheduleSaveBar').classList.add('hidden');
+   await refreshAll();
+   msg(`บันทึกสำเร็จ ${r.affected||0} ช่อง`);
+ }catch(e){msg(e.message,true)}
 }
 function openBulkSchedule(){
  const month=$('scheduleMonth').value||new Date().toISOString().slice(0,7);
