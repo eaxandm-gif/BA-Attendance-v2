@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BA Attendance Admin</title>
-<script src="config.js"></script>
+<script src="admin-config.js?v=2.4.0"></script>
 <style>
 :root{--pink:#db2777;--soft:#fff1f7;--line:#fbcfe8;--text:#4a2438;--muted:#8b5f74;--danger:#b91c1c;--ok:#166534}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,"Noto Sans Thai",sans-serif;background:#fff7fb;color:var(--text)}
@@ -17,6 +17,7 @@ input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);borde
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
 .hidden{display:none!important}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{border-collapse:collapse;width:100%;min-width:900px}
 th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px;vertical-align:top}th{background:#fff1f7;position:sticky;top:0}
+.schedule-grid th,.schedule-grid td{text-align:center;min-width:54px}.schedule-grid .emp{text-align:left;position:sticky;left:0;background:#fff;z-index:2;min-width:170px}.schedule-cell{cursor:pointer;border-radius:8px;padding:5px 3px;line-height:1.2}.schedule-cell.work{background:#fce7f3}.schedule-cell.off{background:#f3f4f6}.schedule-cell.leave{background:#fef3c7}.schedule-cell.empty{background:#fff;border:1px dashed #fbcfe8;color:#aaa}
 .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#fce7f3}.status{padding:10px;border-radius:10px;margin-bottom:10px}.ok{background:#dcfce7;color:var(--ok)}.err{background:#fee2e2;color:#991b1b}
 .modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;padding:16px;z-index:20}.modal.show{display:flex}
 .sheet{background:#fff;border-radius:18px;width:min(760px,100%);max-height:92vh;overflow:auto;padding:18px}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
@@ -27,6 +28,7 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
 <header><div><h1>BA Attendance — Admin System Management</h1><div style="font-size:12px">เพิ่ม · แก้ไข · ลบ · เปลี่ยน · ตรวจสอบ จากหน้าจอเดียว</div></div><button class="gray" onclick="logout()">ออกจากระบบ</button></header>
 <div class="wrap">
 <section id="loginBox" class="login">
+  <div id="loginStatus"></div>
   <div class="grid">
     <div class="field"><label>Admin API Key</label><input id="adminKey" type="password" placeholder="กรอก ADMIN_API_KEY"></div>
     <div style="align-self:end"><button class="primary" onclick="login()">เข้าสู่ระบบ</button></div>
@@ -38,8 +40,10 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
   <section class="panel">
     <div class="toolbar">
       <button class="primary" onclick="createCurrent()">เพิ่มรายการ</button>
+      <button id="bulkScheduleBtn" class="hidden" onclick="openBulkSchedule()">จัด Shift แบบช่วงวัน</button>
       <button onclick="refreshAll()">รีเฟรช</button>
       <input id="search" placeholder="ค้นหา..." oninput="render()" style="max-width:300px">
+      <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
       <button onclick="sendReport('MIDDAY')">ส่งรายงาน 14:00</button>
       <button onclick="sendReport('ENDDAY')">ส่งรายงาน 22:00</button>
     </div>
@@ -59,12 +63,44 @@ const tabs=[
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function msg(t,bad=false){$('status').innerHTML=`<div class="status ${bad?'err':'ok'}">${esc(t)}</div>`;setTimeout(()=>{$('status').innerHTML=''},5000)}
 async function api(action,payload={}){
- const r=await fetch(BA_ADMIN_CONFIG.ADMIN_API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':KEY},body:JSON.stringify({action,payload})});
- const j=await r.json().catch(()=>({}));
- if(!r.ok||j.success===false)throw new Error(j.message||'เกิดข้อผิดพลาด');
- return j;
+ const controller=new AbortController();
+ const timeout=setTimeout(()=>controller.abort(),30000);
+ try{
+  const r=await fetch(BA_ADMIN_CONFIG.ADMIN_API_URL,{
+   method:'POST',
+   headers:{'Content-Type':'application/json','X-Admin-Key':KEY},
+   body:JSON.stringify({action,payload}),
+   signal:controller.signal
+  });
+  const text=await r.text();
+  let j={};
+  try{j=text?JSON.parse(text):{}}catch{throw new Error(`Admin API ตอบกลับไม่ถูกต้อง (${r.status})`)}
+  if(!r.ok||j.success===false)throw new Error(j.message||`เกิดข้อผิดพลาด HTTP ${r.status}`);
+  return j;
+ }catch(e){
+  if(e?.name==='AbortError')throw new Error('Admin API ไม่ตอบกลับภายใน 30 วินาที');
+  throw e;
+ }finally{clearTimeout(timeout)}
 }
-async function login(){KEY=$('adminKey').value.trim();if(!KEY)return;localStorage.setItem('ba_admin_key',KEY);try{const r=await api('bootstrap');DATA=r.data;$('loginBox').classList.add('hidden');$('app').classList.remove('hidden');buildTabs();render();}catch(e){msg(e.message,true)}}
+async function login(){
+ KEY=$('adminKey').value.trim();
+ const box=$('loginStatus');
+ if(!KEY){box.innerHTML='<div class="status err">กรุณากรอก Admin API Key</div>';return}
+ box.innerHTML='<div class="status">กำลังเชื่อมต่อ Admin API...</div>';
+ try{
+  const r=await api('bootstrap');
+  DATA=r.data||{};
+  localStorage.setItem('ba_admin_key',KEY);
+  $('loginBox').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  buildTabs();
+  render();
+ }catch(e){
+  localStorage.removeItem('ba_admin_key');
+  box.innerHTML=`<div class="status err">${esc(e.message)}</div>`;
+  alert(e.message);
+ }
+}
 function logout(){localStorage.removeItem('ba_admin_key');location.reload()}
 async function refreshAll(){try{const r=await api('refresh');DATA=r.data;render();msg('อัปเดตข้อมูลแล้ว')}catch(e){msg(e.message,true)}}
 function buildTabs(){$('tabs').innerHTML=tabs.map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('')}
@@ -72,7 +108,45 @@ function switchTab(id){current=id;buildTabs();render()}
 function findName(list,id,key='id',label='display_name'){const x=(list||[]).find(v=>v[key]===id);return x?x[label]||x.office_name||x.supervisor_name||x.shift_name:id||'-'}
 function filterRows(rows){const q=$('search').value.trim().toLowerCase();return !q?rows:rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q))}
 function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`}
+function localDateISO(d){const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`}
+function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
+function renderScheduleOverview(){
+ const month=$('scheduleMonth').value||new Date().toISOString().slice(0,7);
+ const q=$('search').value.trim().toLowerCase();
+ const employees=(DATA.employees||[]).filter(e=>e.active!==false && (!q||JSON.stringify(e).toLowerCase().includes(q)));
+ const schedules=(DATA.schedules||[]).filter(s=>String(s.work_date||'').startsWith(month));
+ const map=new Map(schedules.map(s=>[`${s.employee_id}:${s.work_date}`,s]));
+ const total=daysInMonth(month);
+ const headers=['พนักงาน',...Array.from({length:total},(_,i)=>String(i+1))];
+ const rows=employees.map(emp=>{
+   const cells=[];
+   for(let day=1;day<=total;day++){
+     const date=`${month}-${String(day).padStart(2,'0')}`;
+     const s=map.get(`${emp.id}:${date}`);
+     let label='–', cls='empty', title='ยังไม่กำหนด';
+     if(s){
+       if(s.schedule_status==='WORK'){
+         label=esc(s.shift_id||'WORK'); cls='work'; title=`${s.shift_id||'WORK'} · ${s.required_minutes||0} นาที`;
+       }else if(s.schedule_status==='OFF'){
+         label='OFF'; cls='off'; title='วันหยุด';
+       }else{
+         label=esc(s.schedule_status); cls='leave'; title=s.schedule_status;
+       }
+     }
+     const payload=s?JSON.stringify(s).replace(/'/g,'&#39;'):JSON.stringify({employee_id:emp.id,work_date:date,schedule_status:'WORK',required_minutes:480});
+     cells.push(`<td><div class="schedule-cell ${cls}" title="${esc(title)}" onclick='editRow(${payload})'>${label}</div></td>`);
+   }
+   return `<tr><td class="emp"><b>${esc(emp.employee_code)}</b><br>${esc(emp.display_name)}</td>${cells.join('')}</tr>`;
+ });
+ $('content').innerHTML=`<div class="muted" style="margin-bottom:8px">คลิกช่องวันที่เพื่อแก้รายวัน หรือใช้ “จัด Shift แบบช่วงวัน” เพื่อเปลี่ยนหลายวันพร้อมกัน</div><div class="table-wrap"><table class="schedule-grid"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
 function render(){
+ $('bulkScheduleBtn').classList.toggle('hidden',current!=='schedules');
+ $('scheduleMonth').classList.toggle('hidden',current!=='schedules');
+ if(current==='schedules'){
+   if(!$('scheduleMonth').value)$('scheduleMonth').value=new Date().toISOString().slice(0,7);
+   return renderScheduleOverview();
+ }
  const rows=filterRows(DATA[current]||[]);
  if(current==='employees')return $('content').innerHTML=table(['รหัส','ชื่อ','โหมด','สาขา','Supervisor','Shift','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.employee_code)}</td><td>${esc(x.display_name)}</td><td>${esc(x.ba_mode)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.default_shift_id)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
  if(current==='supervisors')return $('content').innerHTML=table(['รหัส','ชื่อ','โทร','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.supervisor_code)}</td><td>${esc(x.supervisor_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
@@ -83,7 +157,7 @@ function render(){
  if(current==='leaves')return $('content').innerHTML=table(['วันที่','พนักงาน','ประเภท','เหตุผล','สถานะ','ผู้อนุมัติ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.leave_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.leave_type)}</td><td>${esc(x.reason)}</td><td>${esc(x.status)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${buttons(x)}</td></tr>`));
  if(current==='daily')return $('content').innerHTML=table(['วันที่','พนักงาน','สถานะ','Shift','เข้า','ออก','สาย','ทำงาน','ขาด','เกิน','Net'],rows.map(x=>`<tr><td>${esc(x.work_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.status)}</td><td>${esc(x.shift_id)}</td><td>${esc(x.first_in)}</td><td>${esc(x.last_out)}</td><td>${esc(x.late_minutes)}</td><td>${esc(x.credited_minutes)}</td><td>${esc(x.short_minutes)}</td><td>${esc(x.over_minutes)}</td><td>${esc(x.net_minutes)}</td></tr>`));
  if(current==='monthly')return $('content').innerHTML=table(['เดือน','พนักงาน','วันทำงาน','วันสาย','นาทีสาย','งาน','เติมของ','ขาด','เกิน','Net'],rows.map(x=>`<tr><td>${esc(x.month_start)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.work_days)}</td><td>${esc(x.late_days)}</td><td>${esc(x.late_minutes)}</td><td>${esc(x.work_minutes)}</td><td>${esc(x.refill_minutes)}</td><td>${esc(x.short_minutes)}</td><td>${esc(x.over_minutes)}</td><td>${esc(x.net_minutes)}</td></tr>`));
- if(current==='line_logs')return $('content').innerHTML=table(['เวลา','วันที่','ประเภท','Supervisor','สถานะ','ข้อความ'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.report_date)}</td><td>${esc(x.report_type)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.status)}</td><td style="white-space:pre-wrap">${esc(x.message)}</td></tr>`));
+ if(current==='line_logs')return $('content').innerHTML=table(['วันที่','ประเภท','Supervisor','สถานะ','ข้อความ','Error'],rows.map(x=>`<tr><td>${esc(x.report_date)}</td><td>${esc(x.report_type)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.status)}</td><td style="white-space:pre-wrap">${esc(x.message)}</td><td>${esc(x.error)}</td></tr>`));
  if(current==='audits')return $('content').innerHTML=table(['เวลา','Action','Entity','ID','เหตุผล','ก่อน','หลัง'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)}</td><td>${esc(x.entity_id)}</td><td>${esc(x.reason)}</td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.before_data,null,2))}</pre></details></td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.after_data,null,2))}</pre></details></td></tr>`));
 }
 function buttons(x){return `<button onclick='editRow(${JSON.stringify(x)})'>แก้</button> <button class="danger" onclick='deleteRow(${JSON.stringify(x)})'>ลบ</button>`}
@@ -126,6 +200,71 @@ async function sendReport(type){
  const date=prompt('วันที่รายงาน YYYY-MM-DD',new Date().toISOString().slice(0,10));if(!date)return;
  const reason=prompt('เหตุผลการส่งรายงาน','ส่งจาก Admin');
  try{const r=await api('send_line_report',{type,date,reason});msg(`ส่งรายงานสำเร็จ ${r.result.sent||0} Supervisor`);await refreshAll()}catch(e){msg(e.message,true)}
+}
+function openBulkSchedule(){
+ const month=$('scheduleMonth').value||new Date().toISOString().slice(0,7);
+ const start=`${month}-01`;
+ const end=`${month}-${String(daysInMonth(month)).padStart(2,'0')}`;
+ const employeeOptions=(DATA.employees||[]).filter(e=>e.active!==false).map(e=>`<option value="${e.id}">${esc(e.employee_code)} · ${esc(e.display_name)}</option>`).join('');
+ const shiftOptions=`<option value="">-</option>`+(DATA.shifts||[]).filter(s=>s.active!==false).map(s=>`<option value="${s.id}">${esc(s.shift_name||s.id)}</option>`).join('');
+ $('modalTitle').textContent='จัด Shift แบบช่วงวัน';
+ $('modalBody').innerHTML=`
+ <div class="grid">
+   <div class="field" style="grid-column:1/-1">
+     <label>พนักงาน (เลือกได้หลายคน)</label>
+     <select id="bulkEmployees" multiple size="8">${employeeOptions}</select>
+   </div>
+   <div class="field"><label>วันที่เริ่ม</label><input id="bulkStart" type="date" value="${start}"></div>
+   <div class="field"><label>วันที่สิ้นสุด</label><input id="bulkEnd" type="date" value="${end}"></div>
+   <div class="field"><label>สถานะ</label>
+     <select id="bulkStatus" onchange="toggleBulkShift()">
+       <option value="WORK">WORK</option>
+       <option value="OFF">OFF</option>
+       <option value="SICK_LEAVE">SICK_LEAVE</option>
+       <option value="BUSINESS_LEAVE">BUSINESS_LEAVE</option>
+       <option value="VACATION">VACATION</option>
+     </select>
+   </div>
+   <div class="field" id="bulkShiftWrap"><label>Shift</label><select id="bulkShift">${shiftOptions}</select></div>
+   <div class="field"><label>นาทีงาน</label><input id="bulkMinutes" type="number" value="480"></div>
+   <div class="field"><label>หมายเหตุ</label><input id="bulkNote"></div>
+   <div class="field" style="grid-column:1/-1">
+     <label>เลือกวันในสัปดาห์</label>
+     <div style="display:flex;gap:10px;flex-wrap:wrap">
+       ${[['1','จ'],['2','อ'],['3','พ'],['4','พฤ'],['5','ศ'],['6','ส'],['0','อา']].map(([v,l])=>`<label><input class="bulkWeekday" type="checkbox" value="${v}" checked style="width:auto"> ${l}</label>`).join('')}
+     </div>
+   </div>
+ </div>`;
+ $('saveBtn').onclick=saveBulkSchedule;
+ $('modal').classList.add('show');
+}
+function toggleBulkShift(){
+ const isWork=$('bulkStatus').value==='WORK';
+ $('bulkShiftWrap').classList.toggle('hidden',!isWork);
+}
+async function saveBulkSchedule(){
+ try{
+   const employee_ids=Array.from($('bulkEmployees').selectedOptions).map(o=>o.value);
+   if(!employee_ids.length)throw new Error('กรุณาเลือกพนักงานอย่างน้อย 1 คน');
+   const reason=prompt('เหตุผลการเปลี่ยน Shift หลายวัน');
+   if(!reason)return;
+   const weekdays=Array.from(document.querySelectorAll('.bulkWeekday:checked')).map(x=>Number(x.value));
+   const payload={
+     employee_ids,
+     start_date:$('bulkStart').value,
+     end_date:$('bulkEnd').value,
+     schedule_status:$('bulkStatus').value,
+     shift_id:$('bulkStatus').value==='WORK' ? $('bulkShift').value : null,
+     required_minutes:Number($('bulkMinutes').value||480),
+     note:$('bulkNote').value,
+     weekdays,
+     reason
+   };
+   const r=await api('bulk_save_schedules',payload);
+   closeModal();
+   await refreshAll();
+   msg(`บันทึกตารางงานแล้ว ${r.affected||0} รายการ`);
+ }catch(e){msg(e.message,true)}
 }
 function closeModal(){$('modal').classList.remove('show')}
 window.addEventListener('load',()=>{const k=localStorage.getItem('ba_admin_key');if(k){$('adminKey').value=k;login()}});
