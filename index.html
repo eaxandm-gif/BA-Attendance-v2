@@ -40,17 +40,58 @@ const labels={IN:'เข้างาน',OUT:'ออกงาน',BREAK_OUT:'อ
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function hm(m){m=Math.round(Number(m||0));const s=m<0?'-':'';m=Math.abs(m);return `${s}${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`}
 function notice(t,c=''){$('loading').className='card status '+c;$('loading').textContent=t;$('loading').classList.remove('hidden')}
-function openModal(html){$('modalBody').innerHTML=html;$('modal').classList.add('show')}function closeModal(){$('modal').classList.remove('show')}
+function openModal(html){$('modalBody').innerHTML=html;$('modal').classList.add('show')}
+function closeModal(){$('modal').classList.remove('show')}
+function showModalError(message){openModal(`<div class="title">เกิดข้อผิดพลาด</div><div class="item error">${esc(message)}</div>`)}
+function showMonthPicker(title,buttonText,onConfirm){
+  openModal(`<div class="title">${esc(title)}</div>
+    <div class="field"><label>เลือกเดือน</label><input id="monthPicker" type="month" value="${thaiMonth()}"></div>
+    <button class="primary full" id="monthPickerBtn">${esc(buttonText)}</button>`);
+  $('monthPickerBtn').onclick=()=>onConfirm($('monthPicker').value);
+}
+function showLoadingModal(title='กำลังโหลด...'){openModal(`<div class="title">${esc(title)}</div><div class="item">กรุณารอสักครู่</div>`)}
+
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.7.0';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.7.1';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
 async function renderEmployeeHome(){const r=await BA_API.request('employee_home');$('employeeView').classList.remove('hidden');$('employeeView').innerHTML=`<div class="card"><div class="title">วันนี้</div><div class="status">สถานะ: ${esc(r.state.label)}\nสาขา: ${esc(r.state.office_name||'-')}\nShift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}\nสาย: ${Number(r.shift?.late_minutes||0)} นาที</div><div class="grid" id="actionGrid"></div></div><div class="card"><div class="grid3"><button onclick="showMyHistory()">ประวัติละเอียด</button><button onclick="showMyShift()">Shift ทั้งเดือน</button><button onclick="showMyLeaves()">สถานะการลา</button><button onclick="showMyProfile()">ข้อมูลส่วนตัว</button><button onclick="showLeaveForm()">ยื่นลา</button></div></div>`;const g=$('actionGrid');r.allowed_actions.forEach(a=>{const b=document.createElement('button');b.className=a.includes('OUT')?'orange':'primary';b.textContent=labels[a]||a;b.onclick=()=>submitAttendance(a);g.appendChild(b)})}
 function submitAttendance(type){navigator.geolocation.getCurrentPosition(async p=>{try{await BA_API.request('submit_attendance',{type,latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy});await renderEmployeeHome()}catch(e){alert(e.message)}},()=>alert('กรุณาอนุญาต Location'),{enableHighAccuracy:true,timeout:12000})}
-async function showMyHistory(){const month=prompt('เดือน YYYY-MM',thaiMonth());if(!month)return;const r=await BA_API.request('employee_history_detail',{month});openModal(`<div class="title">ประวัติของฉัน ${month}</div><div class="list">${r.rows.map(x=>`<div class="item"><div class="row"><b>${esc(x.work_date)}</b><span class="badge">${esc(x.shift_name||'-')}</span></div><div>เข้า ${esc(x.first_in_time||'-')} · ออก ${esc(x.last_out_time||'-')} · สาย ${hm(x.late_minutes)} · เกิน ${hm(x.over_minutes)}</div><div>ทำงาน ${hm(x.credited_minutes)} · พัก ${hm(x.break_minutes)} · ขาด ${hm(x.short_minutes)}</div><div class="timeline">${x.events.map(e=>`<div>${esc(e.time)} — ${esc(e.label)}${e.office_name?' @ '+esc(e.office_name):''}</div>`).join('')||'<span class="muted">ไม่มีรายการกดเวลา</span>'}</div></div>`).join('')||'ยังไม่มีข้อมูล'}</div>`)}
-async function showMyProfile(){const r=await BA_API.request('employee_profile');const e=r.employee;openModal(`<div class="title">ข้อมูลส่วนตัว</div><div class="field"><label>รหัส</label><input value="${esc(e.employee_code)}" disabled></div><div class="field"><label>ชื่อ</label><input id="myName" value="${esc(e.display_name)}"></div><div class="field"><label>เบอร์โทร</label><input id="myPhone" value="${esc(e.phone||'')}"></div><div class="muted">ประเภท BA: ${esc(e.ba_mode||'-')} · สาขา: ${esc(e.office_name||'-')}</div><button class="primary full" style="margin-top:12px" onclick="saveMyProfile()">บันทึก</button>`)}
+function showMyHistory(){
+  showMonthPicker('ประวัติของฉัน','ดูประวัติ',async month=>{
+    if(!month)return;
+    showLoadingModal('กำลังโหลดประวัติ');
+    try{
+      const r=await BA_API.request('employee_history_detail',{month});
+      openModal(`<div class="title">ประวัติของฉัน ${month}</div><div class="list">${r.rows.map(x=>`<div class="item"><div class="row"><b>${esc(x.work_date)}</b><span class="badge">${esc(x.shift_name||'-')}</span></div><div>เข้า ${esc(x.first_in_time||'-')} · ออก ${esc(x.last_out_time||'-')} · สาย ${hm(x.late_minutes)} · เกิน ${hm(x.over_minutes)}</div><div>ทำงาน ${hm(x.credited_minutes)} · พัก ${hm(x.break_minutes)} · ขาด ${hm(x.short_minutes)}</div><div class="timeline">${x.events.map(e=>`<div>${esc(e.time)} — ${esc(e.label)}${e.office_name?' @ '+esc(e.office_name):''}</div>`).join('')||'<span class="muted">ไม่มีรายการกดเวลา</span>'}</div></div>`).join('')||'<div class="item">ไม่มีประวัติในเดือนนี้</div>'}</div>`);
+    }catch(e){showModalError(e.message)}
+  });
+}
+async function showMyProfile(){
+  showLoadingModal('กำลังโหลดข้อมูลส่วนตัว');
+  try{
+    const r=await BA_API.request('employee_profile');
+    const e=r.employee;
+    openModal(`<div class="title">ข้อมูลส่วนตัว</div><div class="field"><label>รหัส</label><input value="${esc(e.employee_code)}" disabled></div><div class="field"><label>ชื่อ</label><input id="myName" value="${esc(e.display_name)}"></div><div class="field"><label>เบอร์โทร</label><input id="myPhone" value="${esc(e.phone||'')}"></div><div class="muted">ประเภท BA: ${esc(e.ba_mode||'-')} · สาขา: ${esc(e.office_name||'-')}</div><button class="primary full" style="margin-top:12px" onclick="saveMyProfile()">บันทึก</button>`);
+  }catch(e){showModalError(e.message)}
+}
 async function saveMyProfile(){try{await BA_API.request('update_my_profile',{display_name:$('myName').value,phone:$('myPhone').value});closeModal();alert('บันทึกแล้ว');location.reload()}catch(e){alert(e.message)}}
-async function showMyShift(){const month=prompt('เดือน YYYY-MM',thaiMonth());if(!month)return;const r=await BA_API.request('employee_shift_month',{month});openModal(`<div class="title">Shift ของฉัน ${month}</div><div class="day-grid">${r.rows.map(x=>`<div class="day ${x.status==='WORK'?'work':x.status==='OFF'?'off':'leave'}"><b>${Number(x.date.slice(-2))}</b><br>${esc(x.status==='WORK'?(x.shift_name||x.shift_id):x.status)}<br>${x.start_time?esc(x.start_time):''}</div>`).join('')}</div>`)}
-async function showMyLeaves(){const r=await BA_API.request('my_leave_history');openModal(`<div class="title">สถานะการลา</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.leave_date)} · ${esc(x.leave_type)}</b><div>สถานะ: ${esc(x.status)}</div><div>เหตุผลของฉัน: ${esc(x.reason||'-')}</div><div>เหตุผล/หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'ยังไม่มีคำขอลา'}</div>`)}
+function showMyShift(){
+  showMonthPicker('Shift ทั้งเดือน','ดู Shift',async month=>{
+    if(!month)return;
+    showLoadingModal('กำลังโหลด Shift');
+    try{
+      const r=await BA_API.request('employee_shift_month',{month});
+      openModal(`<div class="title">Shift ของฉัน ${month}</div><div class="day-grid">${r.rows.map(x=>`<div class="day ${x.status==='WORK'?'work':x.status==='OFF'?'off':'leave'}"><b>${Number(x.date.slice(-2))}</b><br>${esc(x.status==='WORK'?(x.shift_name||x.shift_id):x.status)}<br>${x.start_time?esc(x.start_time):''}</div>`).join('')}</div>`);
+    }catch(e){showModalError(e.message)}
+  });
+}
+async function showMyLeaves(){
+  showLoadingModal('กำลังโหลดสถานะการลา');
+  try{
+    const r=await BA_API.request('my_leave_history');
+    openModal(`<div class="title">สถานะการลา</div><div class="muted" style="margin-bottom:10px">ระบบจะแสดงรายการจนถึง 3 วันหลังวันลา</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.leave_date)} · ${esc(x.leave_type)}</b><div>สถานะ: ${esc(x.status)}</div><div>เหตุผลของฉัน: ${esc(x.reason||'-')}</div><div>เหตุผล/หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีรายการลาที่อยู่ในช่วงแสดงผล</div>'}</div>`);
+  }catch(e){showModalError(e.message)}
+}
 function showLeaveForm(){openModal(`<div class="title">ยื่นคำขอลา</div><div class="field"><label>วันที่</label><input id="lvDate" type="date"></div><div class="field"><label>ประเภท</label><select id="lvType"><option value="SICK_LEAVE">ลาป่วย</option><option value="BUSINESS_LEAVE">ลากิจ</option><option value="VACATION">ลาพักร้อน</option></select></div><div class="field"><label>เหตุผล</label><textarea id="lvReason"></textarea></div><button class="primary full" onclick="submitLeave()">ส่งคำขอ</button>`)}
 async function submitLeave(){try{await BA_API.request('submit_leave',{leave_date:$('lvDate').value,leave_type:$('lvType').value,reason:$('lvReason').value});closeModal();alert('ส่งคำขอแล้ว')}catch(e){alert(e.message)}}
 async function renderSupervisorHome(){const r=await BA_API.request('supervisor_dashboard_v2');$('supervisorView').classList.remove('hidden');$('supervisorView').innerHTML=`<div class="card"><div class="title">ภาพรวมทีมวันนี้</div><div class="kpis"><div class="kpi">เข้างานแล้ว<strong>${r.kpis.checked_in}</strong></div><div class="kpi">ออกงานแล้ว<strong>${r.kpis.checked_out}</strong></div><div class="kpi">กำลังทำงาน<strong>${r.kpis.working}</strong></div><div class="kpi">มาสาย<strong>${r.kpis.late}</strong></div><div class="kpi">ลา<strong>${r.kpis.leave}</strong></div><div class="kpi">ข้อมูลไม่ครบ<strong>${r.kpis.incomplete}</strong></div></div></div><div class="card"><div class="grid"><button onclick="showTeam()">ทีมของฉัน</button><button onclick="openSupervisorShift()">Shift รายคนทั้งเดือน</button><button onclick="showPendingLeaves()">อนุมัติการลา</button><button onclick="showDailyV2()">สรุปรายวัน</button><button onclick="showMonthlyV2()">สรุปรายเดือน</button></div></div>`}
