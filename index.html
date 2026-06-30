@@ -53,7 +53,7 @@ function showLoadingModal(title='กำลังโหลด...'){openModal(`<di
 
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.5';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.6';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
 async function renderEmployeeHome(){
   const r=await BA_API.request('employee_home');
   $('employeeView').classList.remove('hidden');
@@ -210,7 +210,7 @@ async function submitLeave(){try{await BA_API.request('submit_leave',{leave_date
 async function renderSupervisorHome(){
   $('supervisorView').classList.remove('hidden');
 
-  let k={total:0,checked_in:0,checked_out:0,working:0,late:0,leave:0,incomplete:0};
+  let k={total:0,checked_in:0,checked_out:0,working:0,on_break:0,late:0,leave:0,incomplete:0};
   let dashboardError='';
 
   try{
@@ -229,6 +229,7 @@ async function renderSupervisorHome(){
         <div class="kpi">เข้างานแล้ว<strong>${k.checked_in}</strong></div>
         <div class="kpi">ออกงานแล้ว<strong>${k.checked_out}</strong></div>
         <div class="kpi">กำลังทำงาน<strong>${k.working}</strong></div>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showTeamOnBreak()">กำลังพัก<strong>${k.on_break||0}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
         <div class="kpi">มาสาย<strong>${k.late}</strong></div>
         <div class="kpi">ลา<strong>${k.leave}</strong></div>
         <div class="kpi">ข้อมูลไม่ครบ<strong>${k.incomplete}</strong></div>
@@ -244,6 +245,23 @@ async function renderSupervisorHome(){
         <button onclick="showMonthlyV2()">สรุปรายเดือน</button>
       </div>
     </div>`;
+}
+
+async function showTeamOnBreak(){
+  showLoadingModal('กำลังโหลดรายชื่อ BA ที่กำลังพัก');
+  try{
+    const r=await BA_API.request('team_on_break');
+    openModal(`<div class="title">BA ที่กำลังพัก (${r.rows.length})</div>
+      <div class="list">${r.rows.map(x=>`<div class="item">
+        <div class="row">
+          <b>${esc(x.employee_code)} · ${esc(x.display_name)}</b>
+          <span class="badge">${hm(x.elapsed_minutes)}</span>
+        </div>
+        <div>สาขา: ${esc(x.office_name||'ไม่ระบุสาขา')}</div>
+        <div>เริ่มพัก: ${esc(x.break_started_time||'-')}</div>
+        <div>พักมาแล้ว: ${Number(x.elapsed_minutes||0)} นาที</div>
+      </div>`).join('')||'<div class="item">ขณะนี้ไม่มี BA กำลังพัก</div>'}</div>`);
+  }catch(e){showModalError(e.message)}
 }
 async function showTeam(){const r=await BA_API.request('team_list');openModal(`<div class="title">ทีมของฉัน</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employee_code)} · ${esc(x.display_name)}</b><div>${esc(x.phone||'-')} · ${esc(x.office_name||'-')} · Default ${esc(x.default_shift_id||'-')}</div><button onclick="editEmployee('${x.id}')">แก้ข้อมูล</button></div>`).join('')}</div>`)}
 async function editEmployee(id){const r=await BA_API.request('team_employee',{employee_id:id});const e=r.employee;openModal(`<div class="title">แก้ข้อมูล ${esc(e.display_name)}</div><div class="field"><label>ชื่อ</label><input id="eName" value="${esc(e.display_name)}"></div><div class="field"><label>เบอร์โทร</label><input id="ePhone" value="${esc(e.phone||'')}"></div><div class="field"><label>ประเภท BA</label><select id="eMode">${['FIXED_BRANCH','MULTI_BRANCH','STOCK_REFILL'].map(v=>`<option ${v===e.ba_mode?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>สาขา</label><select id="eOffice">${r.offices.map(o=>`<option value="${o.id}" ${o.id===e.assigned_office_id?'selected':''}>${esc(o.office_name)}</option>`).join('')}</select></div><div class="field"><label>Default Shift</label><select id="eShift">${r.shifts.map(s=>`<option value="${s.id}" ${s.id===e.default_shift_id?'selected':''}>${esc(s.shift_name)}</option>`).join('')}</select></div><div class="field"><label>เหตุผล</label><textarea id="eReason"></textarea></div><button class="primary full" onclick="saveEmployee('${id}')">บันทึก</button>`)}
