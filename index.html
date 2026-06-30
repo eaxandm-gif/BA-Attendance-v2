@@ -53,7 +53,7 @@ function showLoadingModal(title='กำลังโหลด...'){openModal(`<di
 
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.2';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.3';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
 async function renderEmployeeHome(){
   const r=await BA_API.request('employee_home');
   $('employeeView').classList.remove('hidden');
@@ -233,7 +233,23 @@ async function reviewShiftRequest(id,status){
     showPendingShiftRequests();
   }catch(e){alert(e.message)}
 }
-async function showPendingLeaves(){const r=await BA_API.request('pending_leaves');openModal(`<div class="title">คำขอลารออนุมัติ</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employee_name)} · ${esc(x.leave_date)}</b><div>${esc(x.leave_type)} — ${esc(x.reason)}</div><div class="grid"><button class="green" onclick="reviewLeave('${x.id}','APPROVED')">อนุมัติ</button><button class="red" onclick="reviewLeave('${x.id}','REJECTED')">ปฏิเสธ</button></div></div>`).join('')||'ไม่มีรายการรออนุมัติ'}</div>`)}
+async function showPendingLeaves(){
+  showLoadingModal('กำลังโหลดคำขอลา');
+  try{
+    const r=await BA_API.request('pending_leaves');
+    openModal(`<div class="title">คำขอลารออนุมัติ</div>
+      <div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div>
+      <div class="list">${r.rows.map(x=>`<div class="item">
+        <b>${esc(x.employee_code||'')} · ${esc(x.employee_name)} · ${esc(x.leave_date)}</b>
+        <div>${esc(x.leave_type)} — ${esc(x.reason||'-')}</div>
+        <div>สถานะ: ${esc(x.status)}</div>
+        <div class="grid">
+          <button class="green" onclick="reviewLeave('${x.id}','APPROVED')">อนุมัติ</button>
+          <button class="red" onclick="reviewLeave('${x.id}','REJECTED')">ปฏิเสธ</button>
+        </div>
+      </div>`).join('')||`<div class="item">${esc(r.message||'ไม่มีคำขอลารออนุมัติ')}</div>`}</div>`);
+  }catch(e){showModalError(e.message)}
+}
 async function reviewLeave(id,status){const note=prompt('เหตุผล/หมายเหตุ Supervisor')||'';await BA_API.request('review_leave',{leave_id:id,status,reviewer_note:note});showPendingLeaves()}
 async function showDailyV2(){const d=prompt('วันที่ YYYY-MM-DD',thaiDate());if(!d)return;const r=await BA_API.request('team_daily_v2',{date:d});openModal(`<div class="title">สรุปรายวัน ${d}</div><div class="list">${r.rows.map(x=>`<div class="item"><div class="row"><b>${esc(x.employee_code)} · ${esc(x.display_name)}</b><span class="badge">${esc(x.shift_name||'-')}</span></div><div>เข้า ${esc(x.first_in_time||'-')} · ออก ${esc(x.last_out_time||'-')} · สาย ${hm(x.late_minutes)} · เกิน ${hm(x.over_minutes)}</div><div>ทำงาน ${hm(x.credited_minutes)} · พัก ${hm(x.break_minutes)} · ขาด ${hm(x.short_minutes)} · เติมของ ${hm(x.refill_minutes)}</div><div class="timeline">${x.events.map(e=>`<div>${esc(e.time)} — ${esc(e.label)}${e.office_name?' @ '+esc(e.office_name):''}</div>`).join('')||'<span class="muted">ไม่มีรายการ</span>'}</div><button onclick="editTimeline('${x.employee_id}','${d}')">แก้ Attendance</button></div>`).join('')}</div>`)}
 async function editTimeline(emp,date){const r=await BA_API.request('attendance_timeline',{employee_id:emp,date});openModal(`<div class="title">Attendance Timeline</div><div class="list">${r.events.map(e=>`<div class="item"><div class="row"><span>${esc(e.event_type)} · ${esc(e.time)} · ${esc(e.office_name||'-')}</span><span><button onclick="updateEvent('${e.id}','${emp}','${date}','${e.event_type}','${e.time}')">แก้</button> <button onclick="deleteEvent('${e.id}','${emp}','${date}')">ลบ</button></span></div></div>`).join('')}</div><button class="primary full" onclick="addEvent('${emp}','${date}')">เพิ่มรายการ</button>`)}
