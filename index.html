@@ -53,7 +53,7 @@ function showLoadingModal(title='กำลังโหลด...'){openModal(`<di
 
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.3';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.4';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
 async function renderEmployeeHome(){
   const r=await BA_API.request('employee_home');
   $('employeeView').classList.remove('hidden');
@@ -207,7 +207,44 @@ async function submitShiftRequest(){
 }
 function showLeaveForm(){openModal(`<div class="title">ยื่นคำขอลา</div><div class="field"><label>วันที่</label><input id="lvDate" type="date"></div><div class="field"><label>ประเภท</label><select id="lvType"><option value="SICK_LEAVE">ลาป่วย</option><option value="BUSINESS_LEAVE">ลากิจ</option><option value="VACATION">ลาพักร้อน</option></select></div><div class="field"><label>เหตุผล</label><textarea id="lvReason"></textarea></div><button class="primary full" onclick="submitLeave()">ส่งคำขอ</button>`)}
 async function submitLeave(){try{await BA_API.request('submit_leave',{leave_date:$('lvDate').value,leave_type:$('lvType').value,reason:$('lvReason').value});closeModal();alert('ส่งคำขอแล้ว')}catch(e){alert(e.message)}}
-async function renderSupervisorHome(){const r=await BA_API.request('supervisor_dashboard_v2');$('supervisorView').classList.remove('hidden');$('supervisorView').innerHTML=`<div class="card"><div class="title">ภาพรวมทีมวันนี้</div><div class="kpis"><div class="kpi">เข้างานแล้ว<strong>${r.kpis.checked_in}</strong></div><div class="kpi">ออกงานแล้ว<strong>${r.kpis.checked_out}</strong></div><div class="kpi">กำลังทำงาน<strong>${r.kpis.working}</strong></div><div class="kpi">มาสาย<strong>${r.kpis.late}</strong></div><div class="kpi">ลา<strong>${r.kpis.leave}</strong></div><div class="kpi">ข้อมูลไม่ครบ<strong>${r.kpis.incomplete}</strong></div></div></div><div class="card"><div class="grid"><button onclick="showTeam()">ทีมของฉัน</button><button onclick="openSupervisorShift()">Shift รายคนทั้งเดือน</button><button onclick="showPendingLeaves()">อนุมัติการลา</button><button onclick="showPendingShiftRequests()">อนุมัติเปลี่ยน Shift</button><button onclick="showDailyV2()">สรุปรายวัน</button><button onclick="showMonthlyV2()">สรุปรายเดือน</button></div></div>`}
+async function renderSupervisorHome(){
+  $('supervisorView').classList.remove('hidden');
+
+  let k={total:0,checked_in:0,checked_out:0,working:0,late:0,leave:0,incomplete:0};
+  let dashboardError='';
+
+  try{
+    const r=await BA_API.request('supervisor_dashboard_v2');
+    k=r.kpis||k;
+  }catch(e){
+    dashboardError=e.message||'โหลด Dashboard ไม่สำเร็จ';
+  }
+
+  $('supervisorView').innerHTML=`
+    ${dashboardError?`<div class="card error"><b>Dashboard โหลดไม่สำเร็จ</b><div>${esc(dashboardError)}</div><div class="muted" style="margin-top:6px">เมนูด้านล่างยังใช้งานได้</div></div>`:''}
+    <div class="card">
+      <div class="title">ภาพรวมทีมวันนี้</div>
+      <div class="kpis">
+        <div class="kpi">พนักงานทั้งหมด<strong>${k.total}</strong></div>
+        <div class="kpi">เข้างานแล้ว<strong>${k.checked_in}</strong></div>
+        <div class="kpi">ออกงานแล้ว<strong>${k.checked_out}</strong></div>
+        <div class="kpi">กำลังทำงาน<strong>${k.working}</strong></div>
+        <div class="kpi">มาสาย<strong>${k.late}</strong></div>
+        <div class="kpi">ลา<strong>${k.leave}</strong></div>
+        <div class="kpi">ข้อมูลไม่ครบ<strong>${k.incomplete}</strong></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="grid">
+        <button onclick="showTeam()">ทีมของฉัน</button>
+        <button onclick="openSupervisorShift()">Shift รายคนทั้งเดือน</button>
+        <button onclick="showPendingLeaves()">อนุมัติการลา</button>
+        <button onclick="showPendingShiftRequests()">อนุมัติเปลี่ยน Shift</button>
+        <button onclick="showDailyV2()">สรุปรายวัน</button>
+        <button onclick="showMonthlyV2()">สรุปรายเดือน</button>
+      </div>
+    </div>`;
+}
 async function showTeam(){const r=await BA_API.request('team_list');openModal(`<div class="title">ทีมของฉัน</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employee_code)} · ${esc(x.display_name)}</b><div>${esc(x.phone||'-')} · ${esc(x.office_name||'-')} · Default ${esc(x.default_shift_id||'-')}</div><button onclick="editEmployee('${x.id}')">แก้ข้อมูล</button></div>`).join('')}</div>`)}
 async function editEmployee(id){const r=await BA_API.request('team_employee',{employee_id:id});const e=r.employee;openModal(`<div class="title">แก้ข้อมูล ${esc(e.display_name)}</div><div class="field"><label>ชื่อ</label><input id="eName" value="${esc(e.display_name)}"></div><div class="field"><label>เบอร์โทร</label><input id="ePhone" value="${esc(e.phone||'')}"></div><div class="field"><label>ประเภท BA</label><select id="eMode">${['FIXED_BRANCH','MULTI_BRANCH','STOCK_REFILL'].map(v=>`<option ${v===e.ba_mode?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>สาขา</label><select id="eOffice">${r.offices.map(o=>`<option value="${o.id}" ${o.id===e.assigned_office_id?'selected':''}>${esc(o.office_name)}</option>`).join('')}</select></div><div class="field"><label>Default Shift</label><select id="eShift">${r.shifts.map(s=>`<option value="${s.id}" ${s.id===e.default_shift_id?'selected':''}>${esc(s.shift_name)}</option>`).join('')}</select></div><div class="field"><label>เหตุผล</label><textarea id="eReason"></textarea></div><button class="primary full" onclick="saveEmployee('${id}')">บันทึก</button>`)}
 async function saveEmployee(id){try{await BA_API.request('update_team_employee',{employee_id:id,display_name:$('eName').value,phone:$('ePhone').value,ba_mode:$('eMode').value,assigned_office_id:$('eOffice').value,default_shift_id:$('eShift').value,reason:$('eReason').value});alert('บันทึกแล้ว');showTeam()}catch(e){alert(e.message)}}
