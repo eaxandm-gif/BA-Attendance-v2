@@ -53,8 +53,45 @@ function showLoadingModal(title='กำลังโหลด...'){openModal(`<di
 
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.1';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
-async function renderEmployeeHome(){const r=await BA_API.request('employee_home');$('employeeView').classList.remove('hidden');$('employeeView').innerHTML=`<div class="card"><div class="title">วันนี้</div><div class="status">สถานะ: ${esc(r.state.label)}\nสาขา: ${esc(r.state.office_name||'-')}\nShift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}\nสาย: ${Number(r.shift?.late_minutes||0)} นาที</div><div class="grid" id="actionGrid"></div></div><div class="card"><div class="grid3"><button onclick="showMyHistory()">ประวัติละเอียด</button><button onclick="showMyShift()">Shift ทั้งเดือน</button><button onclick="showMyLeaves()">สถานะการลา</button><button onclick="showMyProfile()">ข้อมูลส่วนตัว</button><button onclick="showShiftRequest()">ขอเปลี่ยน Shift / จัดวันหยุด</button><button onclick="showLeaveForm()">ยื่นลา</button></div></div>`;const g=$('actionGrid');r.allowed_actions.forEach(a=>{const b=document.createElement('button');b.className=a.includes('OUT')?'orange':'primary';b.textContent=labels[a]||a;b.onclick=()=>submitAttendance(a);g.appendChild(b)})}
+async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.2';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function renderEmployeeHome(){
+  const r=await BA_API.request('employee_home');
+  $('employeeView').classList.remove('hidden');
+  const timelineHtml=(r.timeline||[]).map(e=>`<div class="item"><div class="row"><b>${esc(e.time||'-')} · ${esc(e.label||e.type)}</b><span class="badge">${esc(e.office_name||'ไม่ระบุสาขา')}</span></div></div>`).join('')||'<div class="item">วันนี้ยังไม่มีรายการกดเวลา</div>';
+  $('employeeView').innerHTML=`
+    <div class="card">
+      <div class="title">วันนี้</div>
+      <div class="status">สถานะ: ${esc(labels[r.state.label]||r.state.label)}
+สาขาปัจจุบัน: ${esc(r.state.office_name||'-')}
+Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}
+สาย: ${hm(r.summary?.late_minutes||0)} · เกิน: ${hm(r.summary?.over_minutes||0)} · ขาด: ${hm(r.summary?.short_minutes||0)}</div>
+      <div class="grid" id="actionGrid"></div>
+    </div>
+    <div class="card">
+      <div class="title">รายการกดเวลาวันนี้</div>
+      <div class="list">${timelineHtml}</div>
+      <div class="item" style="margin-top:10px">
+        <div>เข้างาน ${esc(r.summary?.first_in||'-')} · ออกงาน ${esc(r.summary?.last_out||'-')}</div>
+        <div>ทำงาน ${hm(r.summary?.credited_minutes||0)} · พัก ${hm(r.summary?.break_minutes||0)} · เติมของ ${hm(r.summary?.refill_minutes||0)}</div>
+      </div>
+    </div>
+    <div class="card"><div class="grid3">
+      <button onclick="showMyHistory()">ประวัติละเอียด</button>
+      <button onclick="showMyShift()">Shift ทั้งเดือน</button>
+      <button onclick="showMyLeaves()">สถานะการลา</button>
+      <button onclick="showMyProfile()">ข้อมูลส่วนตัว</button>
+      <button onclick="showShiftRequest()">ขอเปลี่ยน Shift / จัดวันหยุด</button>
+      <button onclick="showLeaveForm()">ยื่นลา</button>
+    </div></div>`;
+  const g=$('actionGrid');
+  r.allowed_actions.forEach(a=>{
+    const b=document.createElement('button');
+    b.className=a.includes('OUT')?'orange':'primary';
+    b.textContent=labels[a]||a;
+    b.onclick=()=>submitAttendance(a);
+    g.appendChild(b);
+  });
+}
 function submitAttendance(type){navigator.geolocation.getCurrentPosition(async p=>{try{await BA_API.request('submit_attendance',{type,latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy});await renderEmployeeHome()}catch(e){alert(e.message)}},()=>alert('กรุณาอนุญาต Location'),{enableHighAccuracy:true,timeout:12000})}
 function showMyHistory(){
   showMonthPicker('ประวัติของฉัน','ดูประวัติ',async month=>{
