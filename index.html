@@ -82,7 +82,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v2.9.0';
+      $('version').textContent='v2.9.1';
       await renderExternalEmployeeHome();
       return;
     }
@@ -95,7 +95,7 @@ async function init(){
     $('portal').classList.remove('hidden');
     $('name').textContent=session.profile.name;
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v2.9.0';
+    $('version').textContent='v2.9.1';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
@@ -156,7 +156,7 @@ Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.s
       <button onclick="showMyLeaves()">สถานะการลา</button>
       <button onclick="showMyProfile()">ข้อมูลส่วนตัว</button>
       <button onclick="showShiftRequest()">ขอเปลี่ยน Shift / จัดวันหยุด</button>
-      <button onclick="showLeaveForm()">ยื่นลา</button><button onclick="testLocation()">ตรวจ Location</button>
+      <button onclick="showLeaveForm()">ยื่นลา</button>
     </div></div>`;
   const g=$('actionGrid');
   r.allowed_actions.forEach(a=>{
