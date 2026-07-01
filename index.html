@@ -53,7 +53,7 @@ function showLoadingModal(title='กำลังโหลด...'){openModal(`<di
 
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.7';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.8';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
 async function renderEmployeeHome(){
   const r=await BA_API.request('employee_home');
   $('employeeView').classList.remove('hidden');
@@ -100,6 +100,27 @@ function geolocationErrorMessage(err){
   if(err.code===3)return 'ค้นหาตำแหน่งนานเกินไป กรุณาลองใหม่ หรือปิดโหมดประหยัดพลังงาน';
   return `Location Error ${err.code||''}: ${err.message||'ไม่ทราบสาเหตุ'}`;
 }
+
+function openInExternalBrowser(){
+  const url=window.location.origin+window.location.pathname;
+  try{
+    if(window.liff&&liff.isInClient()){
+      liff.openWindow({url,external:true});
+      return;
+    }
+  }catch(_){}
+  window.open(url,'_blank');
+}
+
+function showLocationPermissionFallback(){
+  openModal(`<div class="title">LINE อนุญาต Location แล้ว แต่ LIFF ยังถูกปฏิเสธ</div>
+    <div class="item">
+      <div>จากการตั้งค่าใน iPhone สิทธิ์ของ LINE ถูกต้องแล้ว</div>
+      <div style="margin-top:8px">ปัญหาเกิดที่เบราว์เซอร์ภายใน LINE ซึ่งยังปฏิเสธตำแหน่งของหน้าเว็บนี้</div>
+    </div>
+    <button class="primary full" style="margin-top:12px" onclick="openInExternalBrowser()">เปิดใน Safari เพื่อลงเวลา</button>
+    <div class="muted" style="margin-top:10px">เมื่อ Safari ถามสิทธิ์ ให้เลือก “อนุญาตขณะใช้เว็บไซต์”</div>`);
+}
 function getPosition(options){
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation)return reject({code:0,message:'อุปกรณ์นี้ไม่รองรับ Geolocation'});
@@ -123,7 +144,7 @@ async function testLocation(){
       <div>Longitude: ${Number(p.coords.longitude).toFixed(6)}</div>
       <div>ความแม่นยำ: ${Math.round(p.coords.accuracy||0)} เมตร</div>
     </div>`);
-  }catch(e){showModalError(geolocationErrorMessage(e))}
+  }catch(e){if(e?.code===1)showLocationPermissionFallback();else showModalError(geolocationErrorMessage(e))}
 }
 async function submitAttendance(type){
   showLoadingModal('กำลังตรวจตำแหน่ง');
@@ -138,7 +159,11 @@ async function submitAttendance(type){
     closeModal();
     await renderEmployeeHome();
   }catch(e){
-    showModalError(e?.message&&String(e.message).includes('Location')?e.message:geolocationErrorMessage(e));
+    if(e?.code===1){
+      showLocationPermissionFallback();
+    }else{
+      showModalError(e?.message&&String(e.message).includes('Location')?e.message:geolocationErrorMessage(e));
+    }
   }
 }
 function showMyHistory(){
