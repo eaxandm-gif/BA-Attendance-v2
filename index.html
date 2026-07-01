@@ -35,7 +35,26 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </section></main>
 <div id="modal" class="modal"><div class="sheet"><div id="modalBody"></div><button class="full" onclick="closeModal()">ปิด</button></div></div>
 <script>
-const $=id=>document.getElementById(id);let session=null,selectedShiftDates=new Set(),shiftEditorData=null;
+const $=id=>document.getElementById(id);
+const externalToken=new URLSearchParams(location.search).get('external_session');
+let session=null,selectedShiftDates=new Set(),shiftEditorData=null;
+
+async function appRequest(action,payload={}){
+  if(!externalToken)return BA_API.request(action,payload);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),30000);
+  try{
+    const r=await fetch(BA_CONFIG.EDGE_FUNCTION_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-External-Token':externalToken},
+      body:JSON.stringify({action,payload}),
+      signal:controller.signal
+    });
+    const data=await r.json().catch(()=>({success:false,message:'API ตอบกลับไม่ถูกต้อง'}));
+    if(!r.ok||data.success===false)throw new Error(data.message||`HTTP ${r.status}`);
+    return data;
+  }finally{clearTimeout(timer)}
+}
 const labels={IN:'เข้างาน',OUT:'ออกงาน',BREAK_OUT:'ออกพัก',BREAK_IN:'กลับจากพัก',DAY_IN:'เริ่มวัน',DAY_OUT:'จบวัน',BRANCH_IN:'เข้าสาขา',BRANCH_OUT:'ออกสาขา',WORK_IN:'เข้างาน',WORK_OUT:'ออกงาน',REFILL_IN:'เข้าเติมของ',REFILL_OUT:'ออกจากเติมของ'};
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function hm(m){m=Math.round(Number(m||0));const s=m<0?'-':'';m=Math.abs(m);return `${s}${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`}
@@ -53,7 +72,63 @@ function showLoadingModal(title='กำลังโหลด...'){openModal(`<di
 
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.9';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function init(){
+  let p=null;
+  try{
+    if(externalToken){
+      session=await appRequest('bootstrap');
+      if(session.profile.role!=='EMPLOYEE')throw new Error('ลิงก์นี้ใช้สำหรับ BA เท่านั้น');
+      $('loading').classList.add('hidden');
+      $('portal').classList.remove('hidden');
+      $('name').textContent=session.profile.name;
+      $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
+      $('version').textContent='v2.9.0';
+      await renderExternalEmployeeHome();
+      return;
+    }
+
+    await liff.init({liffId:BA_CONFIG.LIFF_ID});
+    if(!liff.isLoggedIn()){liff.login();return}
+    p=await liff.getProfile();
+    session=await appRequest('bootstrap');
+    $('loading').classList.add('hidden');
+    $('portal').classList.remove('hidden');
+    $('name').textContent=session.profile.name;
+    $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
+    $('version').textContent='v2.9.0';
+    session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
+  }catch(e){
+    notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
+  }
+}
+
+async function renderExternalEmployeeHome(){
+  const r=await appRequest('employee_home');
+  $('employeeView').classList.remove('hidden');
+  const timelineHtml=(r.timeline||[]).map(e=>`<div class="item"><div class="row"><b>${esc(e.time||'-')} · ${esc(e.label||e.type)}</b><span class="badge">${esc(e.office_name||'ไม่ระบุสาขา')}</span></div></div>`).join('')||'<div class="item">วันนี้ยังไม่มีรายการกดเวลา</div>';
+  $('employeeView').innerHTML=`
+    <div class="card">
+      <div class="title">ลงเวลา</div>
+      <div class="muted" style="margin-bottom:10px">ลิงก์นี้ใช้ได้ 10 นาที และใช้ได้เฉพาะการลงเวลา</div>
+      <div class="status">สถานะ: ${esc(labels[r.state.label]||r.state.label)}
+สาขาปัจจุบัน: ${esc(r.state.office_name||'-')}
+Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}</div>
+      <div class="grid" id="actionGrid"></div>
+    </div>
+    <div class="card">
+      <div class="title">รายการกดเวลาวันนี้</div>
+      <div class="list">${timelineHtml}</div>
+    </div>`;
+  const g=$('actionGrid');
+  r.allowed_actions.forEach(a=>{
+    const b=document.createElement('button');
+    b.className=a.includes('OUT')?'orange':'primary';
+    b.textContent=labels[a]||a;
+    b.onclick=()=>submitAttendance(a);
+    g.appendChild(b);
+  });
+}
+
 async function renderEmployeeHome(){
   const r=await BA_API.request('employee_home');
   $('employeeView').classList.remove('hidden');
@@ -101,15 +176,18 @@ function geolocationErrorMessage(err){
   return `Location Error ${err.code||''}: ${err.message||'ไม่ทราบสาเหตุ'}`;
 }
 
-function openInExternalBrowser(){
-  const liffUrl=`https://liff.line.me/${BA_CONFIG.LIFF_ID}`;
+async function openInExternalBrowser(){
   try{
+    const r=await BA_API.request('create_external_session');
+    const url=`${location.origin}${location.pathname}?external_session=${encodeURIComponent(r.token)}`;
     if(window.liff&&liff.isInClient()){
-      liff.openWindow({url:liffUrl,external:true});
+      liff.openWindow({url,external:true});
       return;
     }
-  }catch(_){}
-  window.location.href=liffUrl;
+    window.location.href=url;
+  }catch(e){
+    showModalError(e.message||'สร้างลิงก์ลงเวลาไม่สำเร็จ');
+  }
 }
 
 function showLocationPermissionFallback(){
@@ -150,7 +228,7 @@ async function submitAttendance(type){
   showLoadingModal('กำลังตรวจตำแหน่ง');
   try{
     const p=await requestBestLocation();
-    await BA_API.request('submit_attendance',{
+    await appRequest('submit_attendance',{
       type,
       latitude:p.coords.latitude,
       longitude:p.coords.longitude,
