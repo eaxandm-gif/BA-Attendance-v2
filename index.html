@@ -53,7 +53,7 @@ function showLoadingModal(title='กำลังโหลด...'){openModal(`<di
 
 function thaiMonth(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit'}).format(new Date())}
 function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date())}
-async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.8';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
+async function init(){let p=null;try{await liff.init({liffId:BA_CONFIG.LIFF_ID});if(!liff.isLoggedIn()){liff.login();return}p=await liff.getProfile();session=await BA_API.request('bootstrap');$('loading').classList.add('hidden');$('portal').classList.remove('hidden');$('name').textContent=session.profile.name;$('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';$('version').textContent='v2.8.9';session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome()}catch(e){notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error')}}
 async function renderEmployeeHome(){
   const r=await BA_API.request('employee_home');
   $('employeeView').classList.remove('hidden');
@@ -102,14 +102,14 @@ function geolocationErrorMessage(err){
 }
 
 function openInExternalBrowser(){
-  const url=window.location.origin+window.location.pathname;
+  const liffUrl=`https://liff.line.me/${BA_CONFIG.LIFF_ID}`;
   try{
     if(window.liff&&liff.isInClient()){
-      liff.openWindow({url,external:true});
+      liff.openWindow({url:liffUrl,external:true});
       return;
     }
   }catch(_){}
-  window.open(url,'_blank');
+  window.location.href=liffUrl;
 }
 
 function showLocationPermissionFallback(){
@@ -119,7 +119,7 @@ function showLocationPermissionFallback(){
       <div style="margin-top:8px">ปัญหาเกิดที่เบราว์เซอร์ภายใน LINE ซึ่งยังปฏิเสธตำแหน่งของหน้าเว็บนี้</div>
     </div>
     <button class="primary full" style="margin-top:12px" onclick="openInExternalBrowser()">เปิดใน Safari เพื่อลงเวลา</button>
-    <div class="muted" style="margin-top:10px">เมื่อ Safari ถามสิทธิ์ ให้เลือก “อนุญาตขณะใช้เว็บไซต์”</div>`);
+    <div class="muted" style="margin-top:10px">Safari จะเปิดผ่าน LIFF Login ก่อน จากนั้นเมื่อเว็บไซต์ถามสิทธิ์ ให้เลือก “อนุญาตขณะใช้เว็บไซต์”</div>`);
 }
 function getPosition(options){
   return new Promise((resolve,reject)=>{
