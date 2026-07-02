@@ -88,7 +88,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v3.0.3';
+      $('version').textContent='v3.0.4';
       await renderExternalEmployeeHome();
       return;
     }
@@ -101,7 +101,7 @@ async function init(){
     $('portal').classList.remove('hidden');
     $('name').textContent=session.profile.name;
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v3.0.3';
+    $('version').textContent='v3.0.4';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
