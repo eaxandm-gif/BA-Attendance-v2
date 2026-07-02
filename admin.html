@@ -490,8 +490,15 @@ async function saveRow(id){
   document.querySelectorAll('#modalBody input,#modalBody select,#modalBody textarea').forEach(e=>{if(e.id&&e.id!=='reason')p[e.id]=e.value});
   if('active' in p)p.active=p.active==='true';
   const map={employees:'save_employee',supervisors:'save_supervisor',offices:'save_office',shifts:'save_shift',schedules:'save_schedule',attendance:'save_attendance',leaves:'save_leave'};
-  await api(map[current],p);closeModal();await refreshAll();msg('บันทึกแล้ว');
- }catch(e){msg(e.message,true)}
+  const result=await api(map[current],p);
+  closeModal();
+  await refreshAll();
+  msg(result?.message||'บันทึกแล้ว');
+ }catch(e){
+  const message=e?.message||'บันทึกไม่สำเร็จ';
+  msg(message,true);
+  alert(message);
+ }
 }
 async function deleteRow(x){
  if(!confirm('ยืนยันลบรายการนี้?'))return;
