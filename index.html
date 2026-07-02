@@ -51,7 +51,13 @@ async function appRequest(action,payload={}){
       signal:controller.signal
     });
     const data=await r.json().catch(()=>({success:false,message:'API ตอบกลับไม่ถูกต้อง'}));
-    if(!r.ok||data.success===false)throw new Error(data.message||`HTTP ${r.status}`);
+    if(!r.ok||data.success===false){
+      const message=data.message||`HTTP ${r.status}`;
+      if(String(message).includes('หมดอายุ')){
+        throw new Error('ลิงก์ลงเวลาหมดอายุ กรุณากลับไปเปิด BA Attendance ใน LINE แล้วกดเปิด Safari ใหม่');
+      }
+      throw new Error(message);
+    }
     return data;
   }finally{clearTimeout(timer)}
 }
@@ -82,7 +88,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v3.0.0';
+      $('version').textContent='v3.0.2';
       await renderExternalEmployeeHome();
       return;
     }
@@ -95,7 +101,7 @@ async function init(){
     $('portal').classList.remove('hidden');
     $('name').textContent=session.profile.name;
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v3.0.0';
+    $('version').textContent='v3.0.2';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
@@ -109,7 +115,7 @@ async function renderExternalEmployeeHome(){
   $('employeeView').innerHTML=`
     <div class="card">
       <div class="title">ลงเวลา</div>
-      <div class="muted" style="margin-bottom:10px">ลิงก์นี้ใช้ได้ 10 นาที และใช้ได้เฉพาะการลงเวลา</div>
+      <div class="muted" style="margin-bottom:10px">ลิงก์นี้ใช้ได้จนถึง 03:00 น. ของวันถัดไป และใช้ได้เฉพาะการลงเวลา</div>
       <div class="status">สถานะ: ${esc(labels[r.state.label]||r.state.label)}
 สาขาปัจจุบัน: ${esc(r.state.office_name||'-')}
 Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}</div>
@@ -172,7 +178,8 @@ function geolocationErrorMessage(err){
   if(!err)return 'ไม่สามารถอ่านตำแหน่งได้';
   if(err.code===1)return 'iPhone ปฏิเสธสิทธิ์ Location ให้เปิด Settings → Privacy & Security → Location Services → LINE → While Using the App และเปิด Precise Location';
   if(err.code===2)return 'ไม่พบตำแหน่งในขณะนี้ กรุณาเปิด Wi‑Fi หรือ 4G/5G แล้วลองใหม่ในบริเวณที่รับสัญญาณได้';
-  if(err.code===3)return 'ค้นหาตำแหน่งนานเกินไป กรุณาลองใหม่ หรือปิดโหมดประหยัดพลังงาน';
+  if(err.code===3)return 'ค้นหาตำแหน่งนานเกินไป กรุณาออกไปใกล้หน้าร้านหรือพื้นที่เปิด แล้วลองใหม่';
+  if(err.code===4)return `${err.message||'ความแม่นยำ GPS ต่ำเกินไป'} กรุณาเปิด Wi‑Fi, ปิดโหมดประหยัดพลังงาน และลองใหม่ใกล้หน้าร้าน`;
   return `Location Error ${err.code||''}: ${err.message||'ไม่ทราบสาเหตุ'}`;
 }
 
@@ -206,12 +213,62 @@ function getPosition(options){
   });
 }
 async function requestBestLocation(){
-  try{
-    return await getPosition({enableHighAccuracy:true,timeout:20000,maximumAge:0});
-  }catch(firstError){
-    if(firstError?.code===1)throw firstError;
-    return await getPosition({enableHighAccuracy:false,timeout:20000,maximumAge:60000});
-  }
+  if(!navigator.geolocation)throw {code:0,message:'อุปกรณ์นี้ไม่รองรับ Geolocation'};
+
+  return await new Promise((resolve,reject)=>{
+    let best=null;
+    let settled=false;
+    let watchId=null;
+    let timer=null;
+
+    const cleanup=()=>{
+      if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+      if(timer)clearTimeout(timer);
+    };
+
+    const finishSuccess=(position)=>{
+      if(settled)return;
+      settled=true;
+      cleanup();
+      resolve(position);
+    };
+
+    const finishError=(error)=>{
+      if(settled)return;
+      settled=true;
+      cleanup();
+      reject(error);
+    };
+
+    watchId=navigator.geolocation.watchPosition(position=>{
+      if(!best || Number(position.coords.accuracy||999999)<Number(best.coords.accuracy||999999)){
+        best=position;
+      }
+      if(Number(position.coords.accuracy||999999)<=500){
+        finishSuccess(position);
+      }
+    },error=>{
+      if(error?.code===1)finishError(error);
+    },{
+      enableHighAccuracy:true,
+      maximumAge:0,
+      timeout:30000
+    });
+
+    timer=setTimeout(()=>{
+      if(best && Number(best.coords.accuracy||999999)<=500){
+        finishSuccess(best);
+      }else if(best){
+        finishError({
+          code:4,
+          accuracy:Number(best.coords.accuracy||0),
+          message:`ความแม่นยำ GPS ยังต่ำเกินไป (${Math.round(Number(best.coords.accuracy||0))} เมตร)`
+        });
+      }else{
+        finishError({code:3,message:'ค้นหาตำแหน่งไม่สำเร็จ'});
+      }
+    },30000);
+  });
 }
 async function testLocation(){
   showLoadingModal('กำลังตรวจ Location');
