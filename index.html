@@ -82,7 +82,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v2.9.3';
+      $('version').textContent='v3.0.0';
       await renderExternalEmployeeHome();
       return;
     }
@@ -95,7 +95,7 @@ async function init(){
     $('portal').classList.remove('hidden');
     $('name').textContent=session.profile.name;
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v2.9.3';
+    $('version').textContent='v3.0.0';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
@@ -224,7 +224,11 @@ async function testLocation(){
     </div>`);
   }catch(e){if(e?.code===1)showLocationPermissionFallback();else showModalError(geolocationErrorMessage(e))}
 }
+let attendanceSubmitting=false;
 async function submitAttendance(type){
+  if(attendanceSubmitting)return;
+  attendanceSubmitting=true;
+  document.querySelectorAll('#actionGrid button').forEach(b=>b.disabled=true);
   showLoadingModal('กำลังตรวจตำแหน่ง');
   try{
     const p=await requestBestLocation();
@@ -232,16 +236,22 @@ async function submitAttendance(type){
       type,
       latitude:p.coords.latitude,
       longitude:p.coords.longitude,
-      accuracy:p.coords.accuracy
+      accuracy:p.coords.accuracy,
+      request_key:(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`)
     });
     closeModal();
     await renderEmployeeHome();
   }catch(e){
     if(e?.code===1){
       showLocationPermissionFallback();
+    }else if(typeof e?.code==='number'){
+      showModalError(geolocationErrorMessage(e));
     }else{
-      showModalError(e?.message&&String(e.message).includes('Location')?e.message:geolocationErrorMessage(e));
+      showModalError(e?.message||'ไม่สามารถบันทึกเวลาได้');
     }
+  }finally{
+    attendanceSubmitting=false;
+    document.querySelectorAll('#actionGrid button').forEach(b=>b.disabled=false);
   }
 }
 function showMyHistory(){
