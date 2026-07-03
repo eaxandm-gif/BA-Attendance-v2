@@ -88,7 +88,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v3.1.1';
+      $('version').textContent='v3.1.2';
       await renderExternalEmployeeHome();
       return;
     }
@@ -101,7 +101,7 @@ async function init(){
     $('portal').classList.remove('hidden');
     $('name').textContent=session.profile.name;
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v3.1.1';
+    $('version').textContent='v3.1.2';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
@@ -112,8 +112,7 @@ async function renderExternalEmployeeHome(){
   const r=await appRequest('employee_home');
   $('employeeView').classList.remove('hidden');
   const timelineHtml=(r.timeline||[]).map(e=>`<div class="item"><div class="row"><b>${esc(e.time||'-')} · ${esc(e.label||e.type)}</b><span class="badge">${esc(e.office_name||'ไม่ระบุสาขา')}</span></div></div>`).join('')||'<div class="item">วันนี้ยังไม่มีรายการกดเวลา</div>';
-  const warningHtml=r.warning?`<div class="card error"><b>ข้อมูลสรุปยังอัปเดตไม่สำเร็จ</b><div>${esc(r.warning)}</div><div class="muted" style="margin-top:6px">ปุ่มลงเวลายังใช้งานได้ตามปกติ</div></div>`:'';
-  $('employeeView').innerHTML=`${warningHtml}
+  $('employeeView').innerHTML=`
     <div class="card">
       <div class="title">ลงเวลา</div>
       <div class="muted" style="margin-bottom:10px">ลิงก์นี้ใช้ได้จนถึง 03:00 น. ของวันถัดไป และใช้ได้เฉพาะการลงเวลา</div>
@@ -127,7 +126,7 @@ Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.s
       <div class="list">${timelineHtml}</div>
     </div>`;
   const g=$('actionGrid');
-  (r.allowed_actions||[]).forEach(a=>{
+  r.allowed_actions.forEach(a=>{
     const b=document.createElement('button');
     b.className=a.includes('OUT')?'orange':'primary';
     b.textContent=labels[a]||a;
@@ -140,8 +139,7 @@ async function renderEmployeeHome(){
   const r=await BA_API.request('employee_home');
   $('employeeView').classList.remove('hidden');
   const timelineHtml=(r.timeline||[]).map(e=>`<div class="item"><div class="row"><b>${esc(e.time||'-')} · ${esc(e.label||e.type)}</b><span class="badge">${esc(e.office_name||'ไม่ระบุสาขา')}</span></div></div>`).join('')||'<div class="item">วันนี้ยังไม่มีรายการกดเวลา</div>';
-  const warningHtml=r.warning?`<div class="card error"><b>ข้อมูลสรุปยังอัปเดตไม่สำเร็จ</b><div>${esc(r.warning)}</div><div class="muted" style="margin-top:6px">ปุ่มลงเวลายังใช้งานได้ตามปกติ</div></div>`:'';
-  $('employeeView').innerHTML=`${warningHtml}
+  $('employeeView').innerHTML=`
     <div class="card">
       <div class="title">วันนี้</div>
       <div class="status">สถานะ: ${esc(labels[r.state.label]||r.state.label)}
@@ -167,7 +165,7 @@ Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.s
       <button onclick="showLeaveForm()">ยื่นลา</button>
     </div></div>`;
   const g=$('actionGrid');
-  (r.allowed_actions||[]).forEach(a=>{
+  r.allowed_actions.forEach(a=>{
     const b=document.createElement('button');
     b.className=a.includes('OUT')?'orange':'primary';
     b.textContent=labels[a]||a;
@@ -404,7 +402,8 @@ async function showShiftRequest(){
         <button class="primary full" onclick="submitAttendanceCorrectionRequest()">ส่งคำขอลงเวลา</button>
       </div>
       <div class="title" style="margin-top:16px">สถานะคำขอลงเวลา</div>
-      <div class="list">${(r.attendance_requests||[]).map(x=>`<div class="item"><b>${esc(x.request_date)} · ลืมลง${x.request_side==='IN'?'เข้า':'ออก'}</b><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลาในช่วง 60 วันที่ผ่านมา</div>'}</div>
+      <div class="muted" style="margin-bottom:8px">แสดงเฉพาะคำขอในช่วง 3 วันที่ผ่านมา คำขอที่รอเกิน 3 วันจะถูกปฏิเสธอัตโนมัติ</div>
+      <div class="list">${(r.attendance_requests||[]).map(x=>`<div class="item"><b>${esc(x.request_date)} · ลืมลง${x.request_side==='IN'?'เข้า':'ออก'}</b><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลาในช่วง 3 วันที่ผ่านมา</div>'}</div>
 
       <div class="title" style="margin-top:16px">คำขอเปลี่ยน Shift ที่กำลังดำเนินการ</div>
       <div class="list">${r.requests.filter(x=>x.request_type==='SHIFT_CHANGE').map(x=>`<div class="item"><b>${esc(x.request_date)}</b><div>ขอเปลี่ยน Shift เป็น ${esc(x.requested_shift_id||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason)}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอเปลี่ยน Shift ที่กำลังดำเนินการ</div>'}</div>`);
