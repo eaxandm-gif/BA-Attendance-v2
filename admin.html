@@ -46,6 +46,7 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
       <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
       <input id="dailyDate" class="hidden" type="date" onchange="render()" style="max-width:180px">
       <input id="monthlyMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
+      <button id="recalcSummaryBtn" class="hidden" onclick="recalculateCurrentSummary()">คำนวณใหม่</button>
       <button id="exportSummaryBtn" class="hidden" onclick="exportCurrentSummary()">ดาวน์โหลด CSV</button>
       <button onclick="sendReport('MIDDAY')">ส่งรายงาน 14:00</button>
       <button onclick="sendReport('ENDDAY')">ส่งรายงาน 22:00</button>
@@ -208,46 +209,23 @@ function pairDuration(events,inType,outType){
  return total;
 }
 function summaryForEmployeeDate(emp,date){
+ const summary=(DATA.daily||[]).find(s=>s.employee_id===emp.id&&s.work_date===date)||null;
  const schedule=(DATA.schedules||[]).find(s=>s.employee_id===emp.id&&s.work_date===date);
  const approvedLeave=(DATA.leaves||[]).find(l=>l.employee_id===emp.id&&l.leave_date===date&&l.status==='APPROVED');
- const shiftId=schedule?.shift_id||emp.default_shift_id||null;
+ const shiftId=summary?.shift_id||schedule?.shift_id||emp.default_shift_id||null;
  const shift=(DATA.shifts||[]).find(s=>s.id===shiftId)||null;
- const scheduleStatus=approvedLeave?.leave_type||schedule?.schedule_status||'WORK';
- const events=(DATA.attendance||[])
-   .filter(e=>e.employee_id===emp.id&&bangkokDateKey(e.occurred_at)===date)
-   .sort((a,b)=>new Date(a.occurred_at)-new Date(b.occurred_at));
+ const today=bangkokDateKey(new Date());
 
- let startType='IN',endType='OUT';
- if(emp.ba_mode==='MULTI_BRANCH'){startType='DAY_IN';endType='DAY_OUT'}
- if(emp.ba_mode==='STOCK_REFILL'){startType='WORK_IN';endType='WORK_OUT'}
-
- const starts=events.filter(e=>e.event_type===startType);
- const ends=events.filter(e=>e.event_type===endType);
- const firstStart=starts[0]||null;
- const lastEnd=ends.length?ends[ends.length-1]:null;
- const startMin=firstStart?eventMinutes(firstStart):null;
- const endMin=lastEnd?eventMinutes(lastEnd):null;
- const breakMinutes=pairDuration(events,'BREAK_OUT','BREAK_IN');
- const refillMinutes=pairDuration(events,'REFILL_IN','REFILL_OUT');
- let creditedMinutes=0;
- if(startMin!=null&&endMin!=null)creditedMinutes=Math.max(0,durationBetween(startMin,endMin)-breakMinutes);
-
- const shiftStart=minutesOfDayFromHHMM(shift?.start_time);
- const grace=Number(shift?.grace_minutes||0);
- const lateMinutes=(startMin!=null&&shiftStart!=null)?Math.max(0,startMin-shiftStart-grace):0;
- const requiredMinutes=Number(schedule?.required_minutes||shift?.required_minutes||480);
- const shortMinutes=(scheduleStatus==='WORK'&&startMin!=null&&endMin!=null)?Math.max(0,requiredMinutes-creditedMinutes):0;
- const overMinutes=(scheduleStatus==='WORK'&&startMin!=null&&endMin!=null)?Math.max(0,creditedMinutes-requiredMinutes):0;
- const netMinutes=overMinutes-shortMinutes;
-
- let status=scheduleStatus;
- if(scheduleStatus==='WORK'){
-   if(startMin==null)status='NOT_STARTED';
-   else if(endMin==null)status='WORKING';
-   else status='COMPLETED';
+ let status=summary?.status||approvedLeave?.leave_type||schedule?.schedule_status||'WORK';
+ if(status==='WORK'){
+   if(date<today)status='ABSENT';
+   else if(date===today)status='NOT_STARTED';
+   else status='FUTURE';
  }
 
- const officeNames=[...new Set(events.map(e=>e.offices?.office_name).filter(Boolean))];
+ const offices=Array.isArray(summary?.branch_names)
+   ?summary.branch_names.join(', ')
+   :(summary?.branch_names||'');
 
  return {
    work_date:date,
@@ -259,20 +237,21 @@ function summaryForEmployeeDate(emp,date){
    status,
    shift_id:shiftId||'',
    shift_name:shift?.shift_name||shiftId||'',
-   shift_start:shift?.start_time?String(shift.start_time).slice(0,5):'',
-   shift_end:shift?.end_time?String(shift.end_time).slice(0,5):'',
-   first_in:firstStart?bangkokTime(firstStart.occurred_at):'',
-   last_out:lastEnd?bangkokTime(lastEnd.occurred_at):'',
-   late_minutes:lateMinutes,
-   credited_minutes:creditedMinutes,
-   break_minutes:breakMinutes,
-   refill_minutes:refillMinutes,
-   required_minutes:requiredMinutes,
-   short_minutes:shortMinutes,
-   over_minutes:overMinutes,
-   net_minutes:netMinutes,
-   offices:officeNames.join(', '),
-   has_events:events.length>0
+   shift_start:summary?.shift_start?String(summary.shift_start).slice(0,5):(shift?.start_time?String(shift.start_time).slice(0,5):''),
+   shift_end:summary?.shift_end?String(summary.shift_end).slice(0,5):(shift?.end_time?String(shift.end_time).slice(0,5):''),
+   first_in:summary?.first_in?bangkokTime(summary.first_in):'',
+   last_out:summary?.last_out?bangkokTime(summary.last_out):'',
+   late_minutes:Number(summary?.late_minutes||0),
+   credited_minutes:Number(summary?.credited_minutes||summary?.work_minutes||0),
+   break_minutes:Number(summary?.break_minutes||0),
+   refill_minutes:Number(summary?.refill_minutes||0),
+   required_minutes:Number(summary?.required_minutes||shift?.required_minutes||0),
+   short_minutes:Number(summary?.short_minutes||0),
+   over_minutes:Number(summary?.over_minutes||0),
+   net_minutes:Number(summary?.net_minutes||0),
+   offices,
+   issue:summary?.issue||'',
+   has_events:Boolean(summary?.first_in||summary?.last_out)
  };
 }
 function buildDailySummary(date){
@@ -282,15 +261,16 @@ function buildDailySummary(date){
 }
 function relevantDatesForEmployeeMonth(emp,month){
  const set=new Set();
+ (DATA.daily||[]).filter(s=>s.employee_id===emp.id&&String(s.work_date||'').startsWith(month)).forEach(s=>set.add(s.work_date));
  (DATA.schedules||[]).filter(s=>s.employee_id===emp.id&&String(s.work_date||'').startsWith(month)).forEach(s=>set.add(s.work_date));
  (DATA.leaves||[]).filter(l=>l.employee_id===emp.id&&String(l.leave_date||'').startsWith(month)&&l.status==='APPROVED').forEach(l=>set.add(l.leave_date));
- (DATA.attendance||[]).filter(a=>a.employee_id===emp.id&&bangkokDateKey(a.occurred_at).startsWith(month)).forEach(a=>set.add(bangkokDateKey(a.occurred_at)));
  return [...set].sort();
 }
 function buildMonthlySummary(month){
  return (DATA.employees||[]).filter(e=>e.active!==false).map(emp=>{
-   const dates=relevantDatesForEmployeeMonth(emp,month);
-   const rows=dates.map(d=>summaryForEmployeeDate(emp,d));
+   const rows=(DATA.daily||[])
+     .filter(s=>s.employee_id===emp.id&&String(s.work_date||'').startsWith(month))
+     .map(s=>summaryForEmployeeDate(emp,s.work_date));
    return {
      month,
      employee_code:emp.employee_code,
@@ -304,6 +284,7 @@ function buildMonthlySummary(month){
      business_leave_days:rows.filter(r=>r.status==='BUSINESS_LEAVE').length,
      vacation_days:rows.filter(r=>r.status==='VACATION').length,
      off_days:rows.filter(r=>r.status==='OFF').length,
+     absent_days:rows.filter(r=>r.status==='ABSENT').length,
      not_started_days:rows.filter(r=>r.status==='NOT_STARTED').length,
      work_minutes:rows.reduce((a,r)=>a+r.credited_minutes,0),
      refill_minutes:rows.reduce((a,r)=>a+r.refill_minutes,0),
@@ -342,7 +323,7 @@ function renderDailySummary(){
   <div class="summary-kpi">หยุด/ลา<strong>${k.leave}</strong></div>
  </div>`;
  const body=table(
-  ['วันที่','พนักงาน','Supervisor','สถานะ','Shift','เวลา Shift','เข้า','ออก','สาย','ทำงาน','พัก','เติมของ','ขาด','เกิน','Net','สาขา'],
+  ['วันที่','พนักงาน','Supervisor','สถานะ','Shift','เวลา Shift','เข้า','ออก','สาย','ทำงาน','พัก','เติมของ','ขาด','เกิน','Net','สาขา','ปัญหา'],
   rows.map(r=>`<tr>
    <td>${esc(r.work_date)}</td>
    <td><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>
@@ -352,7 +333,7 @@ function renderDailySummary(){
    <td>${esc(r.shift_start)}–${esc(r.shift_end)}</td>
    <td>${esc(r.first_in||'-')}</td>
    <td>${esc(r.last_out||'-')}</td>
-   <td class="${r.late_minutes>0?'late':'ontime'}">${r.late_minutes>0?`${r.late_minutes} นาที`:'ตรงเวลา'}</td>
+   <td class="${r.late_minutes>0?'late':'ontime'}">${['COMPLETED','WORKING'].includes(r.status)?(r.late_minutes>0?`${r.late_minutes} นาที`:'ตรงเวลา'):'-'}</td>
    <td>${fmtMinutes(r.credited_minutes)}</td>
    <td>${fmtMinutes(r.break_minutes)}</td>
    <td>${fmtMinutes(r.refill_minutes)}</td>
@@ -360,6 +341,7 @@ function renderDailySummary(){
    <td>${fmtMinutes(r.over_minutes)}</td>
    <td>${fmtMinutes(r.net_minutes)}</td>
    <td>${esc(r.offices||'-')}</td>
+   <td>${esc(r.issue||'-')}</td>
   </tr>`)
  );
  $('content').innerHTML=kpis+body;
@@ -386,7 +368,7 @@ function renderMonthlySummary(){
   <div class="summary-kpi">เวลาเกินรวม<strong>${fmtMinutes(k.over)}</strong></div>
  </div>`;
  const body=table(
-  ['เดือน','พนักงาน','Supervisor','วันทำงาน','จบงาน','วันสาย','นาทีสาย','ไม่เข้างาน','OFF','ลาป่วย','ลากิจ','ลาพักร้อน','ทำงาน','เติมของ','ขาด','เกิน','Net'],
+  ['เดือน','พนักงาน','Supervisor','วันทำงาน','จบงาน','วันสาย','นาทีสาย','ขาดงาน','ยังไม่เข้างาน','OFF','ลาป่วย','ลากิจ','ลาพักร้อน','ทำงาน','เติมของ','ขาด','เกิน','Net'],
   rows.map(r=>`<tr>
    <td>${esc(r.month)}</td>
    <td><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>
@@ -395,6 +377,7 @@ function renderMonthlySummary(){
    <td>${r.completed_days}</td>
    <td>${r.late_days}</td>
    <td>${r.late_minutes}</td>
+   <td>${r.absent_days}</td>
    <td>${r.not_started_days}</td>
    <td>${r.off_days}</td>
    <td>${r.sick_leave_days}</td>
@@ -426,11 +409,27 @@ function exportCurrentSummary(){
  a.click();
  URL.revokeObjectURL(a.href);
 }
+async function recalculateCurrentSummary(){
+ try{
+  $('content').innerHTML='<div class="status">กำลังคำนวณข้อมูลใหม่...</div>';
+  const result=current==='daily'
+    ?await api('recalculate_date',{date:$('dailyDate').value||bangkokDateKey(new Date())})
+    :await api('recalculate_month',{month:$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7)});
+  DATA=result.data||DATA;
+  render();
+  msg(result.message||'คำนวณใหม่แล้ว');
+ }catch(e){
+  const message=e?.message||'คำนวณใหม่ไม่สำเร็จ';
+  msg(message,true);
+  alert(message);
+ }
+}
 function render(){
  $('bulkScheduleBtn').classList.toggle('hidden',current!=='schedules');
  $('scheduleMonth').classList.toggle('hidden',current!=='schedules');
  $('dailyDate').classList.toggle('hidden',current!=='daily');
  $('monthlyMonth').classList.toggle('hidden',current!=='monthly');
+ $('recalcSummaryBtn').classList.toggle('hidden',!['daily','monthly'].includes(current));
  $('exportSummaryBtn').classList.toggle('hidden',!['daily','monthly'].includes(current));
 
  if(current==='schedules'){
