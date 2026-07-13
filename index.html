@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BA Attendance</title>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js?v=2.8.0"></script>
 <script src="api.js?v=2.8.0"></script>
 <style>
@@ -24,6 +25,29 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 .error{color:#991b1b;background:#fee2e2}.status{white-space:pre-line;line-height:1.5}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 @media(max-width:430px){.grid3{grid-template-columns:repeat(2,1fr)}}
 </style>
+
+<style id="v420-mobile-style">
+/* v4.3.0 mobile cosmetic UI inspired by the reference, using existing pink tone */
+.mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
+.mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
+.mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
+.mobile-brand{font-size:13px;letter-spacing:.12em;color:#9d174d;text-transform:uppercase}
+.mobile-title{font-size:28px;line-height:1.08;font-weight:800;margin:10px 0;color:#3b2030}
+.mobile-sub{color:#8b5f74;font-size:14px}
+.mobile-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.mobile-card{border:1px solid #ffd1e7;background:rgba(255,255,255,.9);border-radius:22px;padding:16px;box-shadow:0 10px 30px rgba(219,39,119,.08)}
+.mobile-card b{display:block;margin-bottom:6px}
+.mobile-card strong{font-size:30px;color:#be185d}
+.mobile-actions{display:grid;gap:10px;margin-top:14px}
+.mobile-actions button,.mobile-btn{width:100%;border:0;border-radius:16px;padding:14px 16px;background:#db2777;color:white;font-weight:800}
+.mobile-actions button.soft,.mobile-btn.soft{background:#fff1f7;color:#9d174d}
+.mobile-input{width:100%;border:1px solid #ffd1e7;border-radius:14px;background:#fff;padding:12px 13px;margin:6px 0 10px;color:#4a2438}
+.mobile-select{width:100%;border:1px solid #ffd1e7;border-radius:14px;background:#fff;padding:12px 13px;margin:6px 0 10px;color:#4a2438}
+.mobile-list{display:grid;gap:10px;margin-top:12px}
+.mobile-item{background:white;border:1px solid #ffd1e7;border-radius:18px;padding:14px}
+.mobile-muted{color:#8b5f74;font-size:13px}
+</style>
+
 </head>
 <body>
 <header><h1 style="margin:0">BA Attendance</h1><div>ลงเวลา · Shift · ประวัติ · รายงานทีม</div></header>
@@ -81,6 +105,12 @@ function thaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangk
 async function init(){
   let p=null;
   try{
+    if(new URL(location.href).searchParams.get('admin')==='1'){
+      await liff.init({liffId:BA_CONFIG.LIFF_ID});
+      if(!liff.isLoggedIn()){liff.login();return}
+      await renderMobileAdmin();
+      return;
+    }
     if(externalToken){
       session=await appRequest('bootstrap');
       if(session.profile.role!=='EMPLOYEE')throw new Error('ลิงก์นี้ใช้สำหรับ BA เท่านั้น');
@@ -88,7 +118,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.0.2';
+      $('version').textContent='v4.3.0';
       await renderExternalEmployeeHome();
       return;
     }
@@ -101,10 +131,15 @@ async function init(){
     $('portal').classList.remove('hidden');
     $('name').textContent=session.profile.name;
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.0.2';
+    $('version').textContent='v4.3.0';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
-    notice(e.message+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
+    const msg=String(e.message||e);
+    if(msg.includes('ยังไม่ถูกผูก')||msg.includes('UNREGISTERED')){
+      await renderRegistrationStart(p?.userId);
+      return;
+    }
+    notice(msg+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
   }
 }
 
@@ -613,6 +648,391 @@ async function updateEvent(id,emp,date,type,time){const nt=prompt('Type',type),t
 async function deleteEvent(id,emp,date){const reason=prompt('เหตุผลการลบ');if(reason){await BA_API.request('delete_attendance',{event_id:id,reason});editTimeline(emp,date)}}
 function addEvent(emp,date){const type=prompt('Type'),time=prompt('เวลา HH:MM'),reason=prompt('เหตุผล');if(type&&time&&reason)BA_API.request('add_attendance',{employee_id:emp,date,time,type,reason}).then(()=>editTimeline(emp,date)).catch(e=>alert(e.message))}
 async function showMonthlyV2(){const m=prompt('เดือน YYYY-MM',thaiMonth());if(!m)return;const r=await BA_API.request('team_monthly_v2',{month:m});openModal(`<div class="title">สรุปรายเดือน ${m}</div><div class="muted">วันที่ผ่านมาแล้ว ${r.elapsed_days}/${r.total_days} วัน</div><div class="list" style="margin-top:10px">${r.rows.map(x=>`<div class="item"><b>${esc(x.employee_code)} · ${esc(x.display_name)}</b><div>วันที่ผ่านมา/ทั้งเดือน ${x.elapsed_days}/${x.total_days} · ตารางงาน ${x.scheduled_elapsed}/${x.scheduled_month}</div><div>มาทำงานจริง ${x.actual_work_days} วัน · หยุด ${x.off_days} วัน · เกิน ${x.over_days} วัน · สาย ${x.late_days} วัน · ขาด ${x.short_days} วัน</div><div>สายรวม ${hm(x.late_minutes)} · เกินรวม ${hm(x.over_minutes)}</div><div>ลาป่วย ${x.sick_leave_days} · ลากิจ ${x.business_leave_days} · เติมของ ${x.refill_days} วัน (${hm(x.refill_minutes)}) · ลืมกดออก ${x.forgot_checkout_days} วัน</div></div>`).join('')}</div>`)}
+
+async function renderRegistrationStart(profileId){
+  $('loading').classList.add('hidden');
+  $('portal').classList.remove('hidden');
+  $('name').textContent='ลงทะเบียน BA';
+  $('role').textContent='รอแอดมินอนุมัติ';
+  $('version').textContent='v4.3.0';
+  let r=null, options={supervisors:[]};
+  try{r=await appRequest('public_ba_registration_status')}catch(e){}
+  try{options=await appRequest('public_registration_options')}catch(e){}
+  const req=r?.request, emp=r?.employee;
+  if(emp?.active){
+    $('app').innerHTML=`<div class="mobile-shell"><div class="mobile-hero">
+      <div class="mobile-brand">BA Attendance</div>
+      <div class="mobile-title">บัญชีพร้อมใช้งานแล้ว</div>
+      <div class="mobile-sub">กรุณาปิดแล้วเปิด LIFF ใหม่</div>
+      <div class="mobile-actions"><button onclick="location.reload()">เปิดใหม่</button></div>
+    </div></div>`;
+    return;
+  }
+  if(req?.status==='PENDING'){
+    $('app').innerHTML=`<div class="mobile-shell"><div class="mobile-hero">
+      <div class="mobile-brand">BA Attendance</div>
+      <div class="mobile-title">ส่งคำขอแล้ว</div>
+      <div class="mobile-sub">คำขอลงทะเบียนของคุณกำลังรอแอดมินอนุมัติ</div>
+    </div>
+    <div class="mobile-card"><b>ข้อมูลที่ส่ง</b>
+      <div>รหัส BA: ${esc(req.employee_code||'-')}</div>
+      <div>ชื่อ: ${esc(req.display_name||'-')}</div>
+      <div>เบอร์: ${esc(req.phone||'-')}</div>
+      <div>Supervisor ที่เลือก: ${esc((options.supervisors||[]).find(s=>s.id===req.requested_supervisor_id)?.supervisor_name||'-')}</div>
+    </div></div>`;
+    return;
+  }
+  $('app').innerHTML=`<div class="mobile-shell">
+    <div class="mobile-hero">
+      <div class="mobile-brand">BA Attendance</div>
+      <div class="mobile-title">ลงทะเบียนครั้งแรก</div>
+      <div class="mobile-sub">กรอกข้อมูลเพื่อให้แอดมินตรวจสอบและอนุมัติ ก่อนเริ่มใช้งาน</div>
+    </div>
+    <div class="mobile-card">
+      <label>รหัส BA / รหัสพนักงาน</label>
+      <input id="regCode" class="mobile-input" placeholder="เช่น BA11">
+      <label>ชื่อเล่น / ชื่อที่ใช้ในงาน</label>
+      <input id="regName" class="mobile-input" placeholder="เช่น บลอสซั่ม">
+      <label>ชื่อ-นามสกุล</label>
+      <input id="regFull" class="mobile-input" placeholder="ไม่บังคับ">
+      <label>เบอร์โทร</label>
+      <input id="regPhone" class="mobile-input" inputmode="tel" placeholder="เช่น 0812345678">
+      <label>เลือก Supervisor ของคุณ</label>
+      <select id="regSupervisor" class="mobile-select">
+        <option value="">-- เลือก Supervisor --</option>
+        ${(options.supervisors||[]).map(s=>`<option value="${s.id}">${esc(s.supervisor_name)}</option>`).join('')}
+      </select>
+      <label>หมายเหตุถึง Supervisor</label>
+      <input id="regNote" class="mobile-input" placeholder="ไม่บังคับ">
+      <div class="mobile-actions">
+        <button onclick="submitFirstRegistration()">ส่งคำขอลงทะเบียน</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function submitFirstRegistration(){
+  try{
+    const payload={
+      employee_code:$('regCode').value.trim(),
+      display_name:$('regName').value.trim(),
+      full_name:$('regFull').value.trim(),
+      phone:$('regPhone').value.trim(),
+      supervisor_id:$('regSupervisor').value,
+      note:$('regNote').value.trim()
+    };
+    await appRequest('public_submit_ba_registration',payload);
+    alert('ส่งคำขอลงทะเบียนแล้ว');
+    await renderRegistrationStart();
+  }catch(e){alert(e.message)}
+}
+
+async function renderMobileAdmin(){
+  $('loading').classList.add('hidden');
+  $('portal').classList.remove('hidden');
+  $('name').textContent='Mobile Admin';
+  $('role').textContent='จัดการระบบผ่าน LIFF';
+  $('version').textContent='v4.3.0';
+
+  const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
+  if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
+  localStorage.setItem('BA_ADMIN_KEY',adminKey);
+
+  window.mobileAdminRequest=async function(action,payload={}){
+    const res=await fetch(BA_CONFIG.API_URL,{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':adminKey},body:JSON.stringify({action,payload})});
+    const data=await res.json().catch(()=>({success:false,message:'API Error'}));
+    if(!data.success)throw new Error(data.message||'API Error');
+    return data;
+  }
+  await showMobileAdminHome();
+}
+
+async function showMobileAdminHome(){
+  try{
+    const r=await window.mobileAdminRequest('admin_mobile_bootstrap');
+    const pending=r.pending_registrations||[];
+    const emps=r.employees||[];
+    $('app').innerHTML=`<div class="mobile-shell">
+      <div class="mobile-hero">
+        <div class="mobile-brand">BA Attendance Admin</div>
+        <div class="mobile-title">จัดการระบบ</div>
+        <div class="mobile-sub">โทนเดิม ใช้งานบนโทรศัพท์ได้ง่ายขึ้น</div>
+      </div>
+      <div class="mobile-grid">
+        <div class="mobile-card" onclick="showMobilePendingRegistrations()"><b>BA รออนุมัติ</b><strong>${pending.length}</strong></div>
+        <div class="mobile-card" onclick="showMobileEmployees()"><b>พนักงาน</b><strong>${emps.length}</strong></div>
+        <div class="mobile-card" onclick="showPendingAttendanceRequests()"><b>ลงเวลาย้อนหลัง</b><strong>ดู</strong></div>
+        <div class="mobile-card" onclick="showApprovalInbox()"><b>อนุมัติอื่น ๆ</b><strong>ดู</strong></div>
+      </div>
+      <div class="mobile-actions">
+        <button onclick="exportAdminDailyExcel()">Excel สรุปรายวัน</button>
+        <button onclick="exportAdminMonthlyExcel()">Excel สรุปรายเดือน</button>
+        <button class="soft" onclick="testLineReportNow()">ตรวจ LINE Report</button>
+      </div>
+    </div>`;
+    window.mobileAdminData=r;
+  }catch(e){notice(e.message,'error')}
+}
+
+async function showMobilePendingRegistrations(){
+  const r=window.mobileAdminData||await window.mobileAdminRequest('admin_mobile_bootstrap');
+  const offices=r.offices||[], supervisors=r.supervisors||[];
+  const rows=r.pending_registrations||[];
+  $('app').innerHTML=`<div class="mobile-shell">
+    <div class="mobile-hero"><div class="mobile-brand">Mobile Admin</div><div class="mobile-title">อนุมัติ BA ใหม่</div><div class="mobile-sub">รายการรออนุมัติ ${rows.length} รายการ</div></div>
+    <div class="mobile-list">${rows.map(x=>`<div class="mobile-item">
+      <b>${esc(x.employee_code||'-')} · ${esc(x.display_name||'-')}</b>
+      <div class="mobile-muted">${esc(x.phone||'-')} · LINE: ${esc(x.line_display_name||'-')}</div>
+      <label>ประเภท BA</label>
+      <select id="mode_${x.id}" class="mobile-select">
+        <option value="FIXED_BRANCH">ประจำสาขา</option>
+        <option value="MULTI_BRANCH">หลายสาขา</option>
+        <option value="STOCK_REFILL">เติมของ</option>
+      </select>
+      <label>สาขา</label>
+      <select id="office_${x.id}" class="mobile-select">${offices.map(o=>`<option value="${o.id}">${esc(o.office_name)}</option>`).join('')}</select>
+      <label>Supervisor</label>
+      <select id="sup_${x.id}" class="mobile-select">${supervisors.map(s=>`<option value="${s.id}">${esc(s.supervisor_name)}</option>`).join('')}</select>
+      <div class="mobile-actions">
+        <button onclick="approveMobileBA('${x.id}')">อนุมัติ</button>
+        <button class="soft" onclick="rejectMobileBA('${x.id}')">ไม่อนุมัติ</button>
+      </div>
+    </div>`).join('')||'<div class="mobile-card">ไม่มี BA รออนุมัติ</div>'}</div>
+    <div class="mobile-actions"><button class="soft" onclick="showMobileAdminHome()">กลับ</button></div>
+  </div>`;
+}
+
+async function approveMobileBA(id){
+  try{
+    const note=prompt('หมายเหตุการอนุมัติ','อนุมัติ BA ใหม่')||'อนุมัติ BA ใหม่';
+    await window.mobileAdminRequest('admin_review_ba_registration',{
+      request_id:id,decision:'APPROVED',note,
+      ba_mode:$(`mode_${id}`).value,
+      assigned_office_id:$(`office_${id}`).value,
+      supervisor_id:$(`sup_${id}`).value
+    });
+    alert('อนุมัติแล้ว');
+    window.mobileAdminData=null;
+    await showMobileAdminHome();
+  }catch(e){alert(e.message)}
+}
+
+async function rejectMobileBA(id){
+  try{
+    const note=prompt('เหตุผลที่ไม่อนุมัติ');
+    if(!note)return;
+    await window.mobileAdminRequest('admin_review_ba_registration',{request_id:id,decision:'REJECTED',note});
+    alert('ปฏิเสธแล้ว');
+    window.mobileAdminData=null;
+    await showMobileAdminHome();
+  }catch(e){alert(e.message)}
+}
+
+async function showMobileEmployees(){
+  const r=window.mobileAdminData||await window.mobileAdminRequest('admin_mobile_bootstrap');
+  const rows=r.employees||[];
+  $('app').innerHTML=`<div class="mobile-shell">
+    <div class="mobile-hero"><div class="mobile-brand">Mobile Admin</div><div class="mobile-title">พนักงาน</div><div class="mobile-sub">แตะเพื่อแก้ข้อมูลหลัก</div></div>
+    <div class="mobile-list">${rows.map(x=>`<div class="mobile-item" onclick="editMobileEmployee('${x.id}')">
+      <b>${esc(x.employee_code||'-')} · ${esc(x.display_name||'-')}</b>
+      <div class="mobile-muted">${esc(x.ba_mode||'-')} · ${esc(x.offices?.office_name||'-')} · ${esc(x.supervisors?.supervisor_name||'-')}</div>
+    </div>`).join('')}</div>
+    <div class="mobile-actions"><button class="soft" onclick="showMobileAdminHome()">กลับ</button></div>
+  </div>`;
+}
+
+async function editMobileEmployee(id){
+  const r=window.mobileAdminData||await window.mobileAdminRequest('admin_mobile_bootstrap');
+  const e=(r.employees||[]).find(x=>x.id===id);
+  if(!e)return alert('ไม่พบพนักงาน');
+  const display_name=prompt('ชื่อที่แสดง',e.display_name||'');
+  if(display_name===null)return;
+  const phone=prompt('เบอร์โทร',e.phone||'');
+  const reason=prompt('เหตุผลการแก้ไข','แก้ไขผ่าน Mobile Admin')||'แก้ไขผ่าน Mobile Admin';
+  await window.mobileAdminRequest('admin_mobile_update_employee',{id,display_name,phone,reason});
+  alert('บันทึกแล้ว');
+  window.mobileAdminData=null;
+  await showMobileEmployees();
+}
+
+
+async function showSupervisorRegistrations(){
+  try{
+    const [r,o]=await Promise.all([
+      BA_API.request('supervisor_registration_requests'),
+      BA_API.request('supervisor_offices')
+    ]);
+    const activeOffices=(o.rows||[]).filter(x=>x.active);
+    openModal(`<div class="title">BA ใหม่รออนุมัติ</div>
+      <div class="list">${(r.rows||[]).map(x=>`<div class="item">
+        <b>${esc(x.employee_code||'-')} · ${esc(x.display_name||'-')}</b>
+        <div>${esc(x.phone||'-')}</div>
+        <label>ประเภท BA</label>
+        <select id="sreg_mode_${x.id}" class="mobile-select">
+          <option value="FIXED_BRANCH">ประจำสาขา</option>
+          <option value="MULTI_BRANCH">หลายสาขา</option>
+          <option value="STOCK_REFILL">เติมของ</option>
+        </select>
+        <label>ออฟฟิศ</label>
+        <select id="sreg_office_${x.id}" class="mobile-select">
+          ${activeOffices.map(v=>`<option value="${v.id}">${esc(v.office_name)}</option>`).join('')}
+        </select>
+        <div class="grid">
+          <button class="green" onclick="reviewSupervisorRegistration('${x.id}','APPROVED')">อนุมัติ</button>
+          <button class="red" onclick="reviewSupervisorRegistration('${x.id}','REJECTED')">ไม่อนุมัติ</button>
+        </div>
+      </div>`).join('')||'<div class="item">ไม่มีคำขอ</div>'}</div>`);
+  }catch(e){showModalError(e.message)}
+}
+
+async function reviewSupervisorRegistration(id,decision){
+  const note=prompt(decision==='APPROVED'?'หมายเหตุการอนุมัติ':'เหตุผลที่ไม่อนุมัติ');
+  if(!note)return;
+  const payload={request_id:id,decision,note};
+  if(decision==='APPROVED'){
+    payload.ba_mode=$(`sreg_mode_${id}`).value;
+    payload.assigned_office_id=$(`sreg_office_${id}`).value;
+  }
+  await BA_API.request('supervisor_review_ba_registration',payload);
+  alert(decision==='APPROVED'?'อนุมัติแล้ว':'ปฏิเสธแล้ว');
+  showSupervisorRegistrations();
+}
+
+async function showSupervisorOffices(){
+  try{
+    const r=await BA_API.request('supervisor_offices');
+    openModal(`<div class="title">จัดการออฟฟิศ</div>
+      <button class="primary full" onclick="addSupervisorOffice()">เพิ่มออฟฟิศ</button>
+      <div class="list" style="margin-top:10px">${(r.rows||[]).map(x=>`<div class="item">
+        <b>${esc(x.office_code||'-')} · ${esc(x.office_name||'-')}</b>
+        <div>${esc(x.region||'-')} · ${x.active?'ใช้งาน':'Inactive'}</div>
+        ${x.active?`<button class="red" onclick="inactiveSupervisorOffice('${x.id}')">Inactive</button>`:''}
+      </div>`).join('')}</div>`);
+  }catch(e){showModalError(e.message)}
+}
+
+async function addSupervisorOffice(){
+  const office_code=prompt('รหัสออฟฟิศ'); if(!office_code)return;
+  const office_name=prompt('ชื่อออฟฟิศ'); if(!office_name)return;
+  const region=prompt('Region','');
+  const latitude=prompt('Latitude','0');
+  const longitude=prompt('Longitude','0');
+  const radius_meters=prompt('รัศมีเมตร','300');
+  const reason=prompt('เหตุผล','เพิ่มออฟฟิศใหม่');
+  if(!reason)return;
+  await BA_API.request('supervisor_add_office',{office_code,office_name,region,latitude,longitude,radius_meters,reason});
+  alert('เพิ่มออฟฟิศแล้ว');
+  showSupervisorOffices();
+}
+
+async function inactiveSupervisorOffice(office_id){
+  const reason=prompt('เหตุผลที่ Inactive ออฟฟิศ');
+  if(!reason)return;
+  await BA_API.request('supervisor_inactive_office',{office_id,reason});
+  alert('Inactive แล้ว');
+  showSupervisorOffices();
+}
+
+async function showSupervisorMonthlySummary(){
+  const month=prompt('เดือน YYYY-MM',thaiMonth());
+  if(!month)return;
+  try{
+    const r=await BA_API.request('supervisor_monthly_to_yesterday',{month});
+    openModal(`<div class="title">สรุปรายเดือน ${esc(month)}</div>
+      <div class="muted">${esc(r.start_date)} ถึง ${esc(r.end_date)}</div>
+      <div class="list" style="margin-top:10px">${(r.rows||[]).map(x=>`<div class="item">
+        <b>${esc(x.employee_code)} · ${esc(x.display_name)}</b>
+        <div>มาทำงาน ${x.work_days} · ขาด ${x.absent_days} · ลา ${x.leave_days}</div>
+        <div>สาย ${x.late_days} วัน (${hm(x.late_minutes)}) · ขาดเวลา ${hm(x.short_minutes)} · เกิน ${hm(x.over_minutes)}</div>
+        <div>เติมของ ${hm(x.refill_minutes)} · ลืมออก ${x.forgot_checkout_days} วัน</div>
+        <button class="red" onclick="inactiveTeamEmployee('${x.employee_id}')">Inactive พนักงาน</button>
+      </div>`).join('')}</div>`);
+  }catch(e){showModalError(e.message)}
+}
+
+async function inactiveTeamEmployee(employee_id){
+  const reason=prompt('เหตุผลที่ Inactive พนักงาน');
+  if(!reason)return;
+  await BA_API.request('supervisor_inactive_employee',{employee_id,reason});
+  alert('Inactive บัญชีแล้ว');
+  showSupervisorMonthlySummary();
+}
+
+function downloadWorkbook(filename,sheets){
+  const wb=XLSX.utils.book_new();
+  for(const [name,rows] of Object.entries(sheets)){
+    const ws=XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb,ws,name.slice(0,31));
+  }
+  XLSX.writeFile(wb,filename);
+}
+
+async function exportAdminDailyExcel(){
+  try{
+    const date=prompt('วันที่ YYYY-MM-DD',thaiDate());
+    if(!date)return;
+    const r=await window.mobileAdminRequest('admin_export_daily',{date});
+    const rows=(r.rows||[]).map(x=>({
+      วันที่:x.work_date,
+      รหัสพนักงาน:x.employees?.employee_code||'',
+      ชื่อ:x.employees?.display_name||'',
+      Supervisor:x.employees?.supervisors?.supervisor_name||'',
+      สถานะ:x.status,
+      เข้า:x.first_in||'',
+      ออก:x.last_out||'',
+      นาทีทำงาน:x.work_minutes||0,
+      นาทีพัก:x.break_minutes||0,
+      นาทีสาย:x.late_minutes||0,
+      นาทีขาด:x.short_minutes||0,
+      นาทีเกิน:x.over_minutes||0,
+      นาทีเติมของ:x.refill_minutes||0,
+      ปัญหา:x.issue||''
+    }));
+    downloadWorkbook(`BA_Daily_${date}.xlsx`,{'สรุปรายวัน':rows});
+  }catch(e){alert(e.message)}
+}
+
+async function exportAdminMonthlyExcel(){
+  try{
+    const month=prompt('เดือน YYYY-MM',thaiMonth());
+    if(!month)return;
+    const r=await window.mobileAdminRequest('admin_export_monthly',{month});
+    const detail=(r.rows||[]).map(x=>({
+      วันที่:x.work_date,
+      รหัสพนักงาน:x.employees?.employee_code||'',
+      ชื่อ:x.employees?.display_name||'',
+      Supervisor:x.employees?.supervisors?.supervisor_name||'',
+      สถานะ:x.status,
+      นาทีทำงาน:x.work_minutes||0,
+      นาทีพัก:x.break_minutes||0,
+      นาทีสาย:x.late_minutes||0,
+      นาทีขาด:x.short_minutes||0,
+      นาทีเกิน:x.over_minutes||0,
+      นาทีเติมของ:x.refill_minutes||0,
+      ปัญหา:x.issue||''
+    }));
+    const map=new Map();
+    for(const x of detail){
+      const k=`${x.รหัสพนักงาน}|${x.ชื่อ}|${x.Supervisor}`;
+      if(!map.has(k))map.set(k,{รหัสพนักงาน:x.รหัสพนักงาน,ชื่อ:x.ชื่อ,Supervisor:x.Supervisor,วันทำงาน:0,วันขาด:0,วันลา:0,วันสาย:0,นาทีสาย:0,นาทีขาด:0,นาทีเกิน:0,นาทีเติมของ:0});
+      const s=map.get(k);
+      if(['COMPLETED','WORKING'].includes(x.สถานะ))s.วันทำงาน++;
+      if(x.สถานะ==='ABSENT')s.วันขาด++;
+      if(String(x.สถานะ).includes('LEAVE'))s.วันลา++;
+      if(x.นาทีสาย>0)s.วันสาย++;
+      s.นาทีสาย+=x.นาทีสาย;
+      s.นาทีขาด+=x.นาทีขาด;
+      s.นาทีเกิน+=x.นาทีเกิน;
+      s.นาทีเติมของ+=x.นาทีเติมของ;
+    }
+    downloadWorkbook(`BA_Monthly_${month}.xlsx`,{'สรุปรายเดือน':[...map.values()],'รายละเอียดรายวัน':detail});
+  }catch(e){alert(e.message)}
+}
+
+async function testLineReportNow(){
+  alert('เช็ค Cron ที่ Supabase ให้มี job line-report-0900-yesterday-anomaly เวลา 0 2 * * * UTC และ Body เป็น {}');
+}
+
 window.addEventListener('load',init)
 </script>
 </body></html>
