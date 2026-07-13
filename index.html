@@ -27,7 +27,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.3.1 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.3.2 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -60,6 +60,13 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 <div id="modal" class="modal"><div class="sheet"><div id="modalBody"></div><button class="full" onclick="closeModal()">ปิด</button></div></div>
 <script>
 const $=id=>document.getElementById(id);
+function mobileRoot(){
+  const root=$('employeeView')||$('supervisorView')||$('portal');
+  if(!root)throw new Error('ไม่พบพื้นที่แสดงผล');
+  $('employeeView')?.classList.remove('hidden');
+  $('supervisorView')?.classList.add('hidden');
+  return root;
+}
 const externalToken=new URLSearchParams(location.search).get('external_session');
 let session=null,selectedShiftDates=new Set(),shiftEditorData=null;
 
@@ -118,7 +125,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.3.1';
+      $('version').textContent='v4.3.2';
       await renderExternalEmployeeHome();
       return;
     }
@@ -135,7 +142,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.3.1';
+    $('version').textContent='v4.3.2';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -658,13 +665,13 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.3.1';
+  $('version').textContent='v4.3.2';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
   const req=r?.request, emp=r?.employee;
   if(emp?.active){
-    $('app').innerHTML=`<div class="mobile-shell"><div class="mobile-hero">
+    mobileRoot().innerHTML=`<div class="mobile-shell"><div class="mobile-hero">
       <div class="mobile-brand">BA Attendance</div>
       <div class="mobile-title">บัญชีพร้อมใช้งานแล้ว</div>
       <div class="mobile-sub">กรุณาปิดแล้วเปิด LIFF ใหม่</div>
@@ -673,7 +680,7 @@ async function renderRegistrationStart(profileId){
     return;
   }
   if(req?.status==='PENDING'){
-    $('app').innerHTML=`<div class="mobile-shell"><div class="mobile-hero">
+    mobileRoot().innerHTML=`<div class="mobile-shell"><div class="mobile-hero">
       <div class="mobile-brand">BA Attendance</div>
       <div class="mobile-title">ส่งคำขอแล้ว</div>
       <div class="mobile-sub">คำขอลงทะเบียนของคุณกำลังรอแอดมินอนุมัติ</div>
@@ -686,7 +693,7 @@ async function renderRegistrationStart(profileId){
     </div></div>`;
     return;
   }
-  $('app').innerHTML=`<div class="mobile-shell">
+  mobileRoot().innerHTML=`<div class="mobile-shell">
     <div class="mobile-hero">
       <div class="mobile-brand">BA Attendance</div>
       <div class="mobile-title">ลงทะเบียนครั้งแรก</div>
@@ -736,7 +743,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.3.1';
+  $('version').textContent='v4.3.2';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
@@ -756,7 +763,7 @@ async function showMobileAdminHome(){
     const r=await window.mobileAdminRequest('admin_mobile_bootstrap');
     const pending=r.pending_registrations||[];
     const emps=r.employees||[];
-    $('app').innerHTML=`<div class="mobile-shell">
+    mobileRoot().innerHTML=`<div class="mobile-shell">
       <div class="mobile-hero">
         <div class="mobile-brand">BA Attendance Admin</div>
         <div class="mobile-title">จัดการระบบ</div>
@@ -782,7 +789,7 @@ async function showMobilePendingRegistrations(){
   const r=window.mobileAdminData||await window.mobileAdminRequest('admin_mobile_bootstrap');
   const offices=r.offices||[], supervisors=r.supervisors||[];
   const rows=r.pending_registrations||[];
-  $('app').innerHTML=`<div class="mobile-shell">
+  mobileRoot().innerHTML=`<div class="mobile-shell">
     <div class="mobile-hero"><div class="mobile-brand">Mobile Admin</div><div class="mobile-title">อนุมัติ BA ใหม่</div><div class="mobile-sub">รายการรออนุมัติ ${rows.length} รายการ</div></div>
     <div class="mobile-list">${rows.map(x=>`<div class="mobile-item">
       <b>${esc(x.employee_code||'-')} · ${esc(x.display_name||'-')}</b>
@@ -835,7 +842,7 @@ async function rejectMobileBA(id){
 async function showMobileEmployees(){
   const r=window.mobileAdminData||await window.mobileAdminRequest('admin_mobile_bootstrap');
   const rows=r.employees||[];
-  $('app').innerHTML=`<div class="mobile-shell">
+  mobileRoot().innerHTML=`<div class="mobile-shell">
     <div class="mobile-hero"><div class="mobile-brand">Mobile Admin</div><div class="mobile-title">พนักงาน</div><div class="mobile-sub">แตะเพื่อแก้ข้อมูลหลัก</div></div>
     <div class="mobile-list">${rows.map(x=>`<div class="mobile-item" onclick="editMobileEmployee('${x.id}')">
       <b>${esc(x.employee_code||'-')} · ${esc(x.display_name||'-')}</b>
