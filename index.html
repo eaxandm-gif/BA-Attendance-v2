@@ -27,7 +27,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.3.3 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.4.0 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -125,7 +125,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.3.3';
+      $('version').textContent='v4.4.0';
       await renderExternalEmployeeHome();
       return;
     }
@@ -142,7 +142,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.3.3';
+    $('version').textContent='v4.4.0';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -658,14 +658,14 @@ async function editTimeline(emp,date){const r=await BA_API.request('attendance_t
 async function updateEvent(id,emp,date,type,time){const nt=prompt('Type',type),tm=prompt('เวลา HH:MM',time),reason=prompt('เหตุผล');if(nt&&tm&&reason){await BA_API.request('update_attendance',{event_id:id,date,time:tm,type:nt,reason});editTimeline(emp,date)}}
 async function deleteEvent(id,emp,date){const reason=prompt('เหตุผลการลบ');if(reason){await BA_API.request('delete_attendance',{event_id:id,reason});editTimeline(emp,date)}}
 function addEvent(emp,date){const type=prompt('Type'),time=prompt('เวลา HH:MM'),reason=prompt('เหตุผล');if(type&&time&&reason)BA_API.request('add_attendance',{employee_id:emp,date,time,type,reason}).then(()=>editTimeline(emp,date)).catch(e=>alert(e.message))}
-async function showMonthlyV2(){const m=prompt('เดือน YYYY-MM',thaiMonth());if(!m)return;const r=await BA_API.request('team_monthly_v2',{month:m});openModal(`<div class="title">สรุปรายเดือน ${m}</div><div class="muted">วันที่ผ่านมาแล้ว ${r.elapsed_days}/${r.total_days} วัน</div><div class="list" style="margin-top:10px">${r.rows.map(x=>`<div class="item"><b>${esc(x.employee_code)} · ${esc(x.display_name)}</b><div>วันที่ผ่านมา/ทั้งเดือน ${x.elapsed_days}/${x.total_days} · ตารางงาน ${x.scheduled_elapsed}/${x.scheduled_month}</div><div>มาทำงานจริง ${x.actual_work_days} วัน · หยุด ${x.off_days} วัน · เกิน ${x.over_days} วัน · สาย ${x.late_days} วัน · ขาด ${x.short_days} วัน</div><div>สายรวม ${hm(x.late_minutes)} · เกินรวม ${hm(x.over_minutes)}</div><div>ลาป่วย ${x.sick_leave_days} · ลากิจ ${x.business_leave_days} · เติมของ ${x.refill_days} วัน (${hm(x.refill_minutes)}) · ลืมกดออก ${x.forgot_checkout_days} วัน</div></div>`).join('')}</div>`)}
+async function showMonthlyV2(){const m=prompt('เดือน YYYY-MM',thaiMonth());if(!m)return;const r=await BA_API.request('team_monthly_v2',{month:m});openModal(`<div class="title">สรุปรายเดือน ${m}</div><div class="muted">วันที่ผ่านมาแล้ว ${r.elapsed_days}/${r.total_days} วัน</div><div class="list" style="margin-top:10px">${r.rows.map(x=>`<div class="item"><b>${esc(x.employee_code)} · ${esc(x.display_name)}</b><div>วันที่ผ่านมา/ทั้งเดือน ${x.elapsed_days}/${x.total_days} · ตารางงาน ${x.scheduled_elapsed}/${x.scheduled_month}</div><div>มาทำงานจริง ${x.actual_work_days} วัน · หยุด ${x.off_days} วัน · เกิน ${x.over_days} วัน · ขาด ${x.short_days} วัน</div><div>เกินรวม ${hm(x.over_minutes)}</div><div>ลาป่วย ${x.sick_leave_days} · ลากิจ ${x.business_leave_days} · เติมของ ${x.refill_days} วัน (${hm(x.refill_minutes)}) · ลืมกดออก ${x.forgot_checkout_days} วัน</div></div>`).join('')}</div>`)}
 
 async function renderRegistrationStart(profileId){
   $('loading').classList.add('hidden');
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.3.3';
+  $('version').textContent='v4.4.0';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -741,7 +741,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.3.3';
+  $('version').textContent='v4.4.0';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
