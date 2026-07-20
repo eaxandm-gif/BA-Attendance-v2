@@ -27,7 +27,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.4.1 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.5.0 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -125,7 +125,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.4.1';
+      $('version').textContent='v4.5.0';
       await renderExternalEmployeeHome();
       return;
     }
@@ -142,7 +142,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.4.1';
+    $('version').textContent='v4.5.0';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -225,6 +225,7 @@ function showEmployeeMoreMenu(){
       <button onclick="showMyProfile()">ข้อมูลส่วนตัว</button>
       <button onclick="showShiftRequest()">ขอหยุด / เปลี่ยนกะ / ขอลงเวลา</button>
       <button onclick="showLeaveForm()">ยื่นลา</button>
+      <button onclick="showOfficeLocationRequest()">ขอเพิ่มออฟฟิศใหม่</button>
     </div>`);
 }
 
@@ -365,6 +366,61 @@ async function submitAttendance(type){
     document.querySelectorAll('#actionGrid button').forEach(b=>b.disabled=false);
   }
 }
+
+async function showOfficeLocationRequest(){
+  showLoadingModal('กำลังโหลดคำขอออฟฟิศ');
+  try{
+    const r=await BA_API.request('employee_office_location_requests');
+    const rows=r.rows||[];
+    openModal(`<div class="title">ขอเพิ่มออฟฟิศใหม่</div>
+      <div class="item">
+        <div>ไปยืนที่ออฟฟิศ/สาขาใหม่ แล้วกดปุ่มด้านล่าง</div>
+        <div class="muted">ระบบจะเก็บพิกัด GPS และส่งให้ Supervisor อนุมัติ</div>
+      </div>
+      <button class="primary full" style="margin-top:12px" onclick="captureNewOfficeLocation()">เก็บ Location และส่งคำขอ</button>
+      <div class="title" style="margin-top:16px">ประวัติคำขอ</div>
+      <div class="list">${rows.map(x=>`<div class="item">
+        <b>${esc(x.requested_office_name||'-')}</b>
+        <div>สถานะ: ${x.status==='PENDING'?'รออนุมัติ':x.status==='APPROVED'?'อนุมัติแล้ว':'ไม่อนุมัติ'}</div>
+        <div>Region: ${esc(x.requested_region||'-')}</div>
+        <div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div>
+      </div>`).join('')||'<div class="item">ยังไม่มีคำขอ</div>'}</div>`);
+  }catch(e){showModalError(e.message)}
+}
+
+async function captureNewOfficeLocation(){
+  const office_name=prompt('ชื่อออฟฟิศ/สาขาใหม่');
+  if(!office_name)return;
+  const region=prompt('Region หรือพื้นที่','');
+  const note=prompt('หมายเหตุถึง Supervisor','');
+  showLoadingModal('กำลังอ่าน Location ของออฟฟิศใหม่');
+  try{
+    const p=await requestBestLocation();
+    const accuracy=Math.round(Number(p.coords.accuracy||0));
+    const confirmed=confirm(
+      `ยืนยันส่งคำขอเพิ่มออฟฟิศ "${office_name}"?\\n`+
+      `Latitude: ${Number(p.coords.latitude).toFixed(6)}\\n`+
+      `Longitude: ${Number(p.coords.longitude).toFixed(6)}\\n`+
+      `ความแม่นยำ: ${accuracy} เมตร`
+    );
+    if(!confirmed){closeModal();return}
+    await BA_API.request('employee_submit_office_location_request',{
+      office_name,
+      region,
+      note,
+      latitude:p.coords.latitude,
+      longitude:p.coords.longitude,
+      accuracy:p.coords.accuracy,
+      radius_meters:300
+    });
+    alert('ส่งคำขอให้ Supervisor แล้ว');
+    showOfficeLocationRequest();
+  }catch(e){
+    if(typeof e?.code==='number')showModalError(geolocationErrorMessage(e));
+    else showModalError(e.message||'ส่งคำขอไม่สำเร็จ');
+  }
+}
+
 function showMyHistory(){
   showMonthPicker('ประวัติของฉัน','ดูประวัติ',async month=>{
     if(!month)return;
@@ -525,8 +581,10 @@ async function renderSupervisorHome(){
     <div class="card">
       <div class="grid">
         <button onclick="showTeam()">ทีมของฉัน</button>
+        <button onclick="showApprovalInbox()">รายการรออนุมัติ (${k.pending_total||0})</button>
+        <button onclick="showSupervisorRegistrations()">อนุมัติ BA ใหม่ (${k.pending_registration||0})</button>
+        <button onclick="showSupervisorOffices()">จัดการออฟฟิศ</button>
         <button onclick="openSupervisorShift()">Shift รายคนทั้งเดือน</button>
-        <button onclick="showApprovalInbox()">รายการรออนุมัติ (${k.pending_total||k.pending_attendance||0})</button>
         <button onclick="showDailyV2()">สรุปรายวัน</button>
         <button onclick="showMonthlyV2()">สรุปรายเดือน</button>
       </div>
@@ -549,7 +607,29 @@ async function showTeamOnBreak(){
       </div>`).join('')||'<div class="item">ขณะนี้ไม่มี BA กำลังพัก</div>'}</div>`);
   }catch(e){showModalError(e.message)}
 }
-async function showTeam(){const r=await BA_API.request('team_list');openModal(`<div class="title">ทีมของฉัน</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employee_code)} · ${esc(x.display_name)}</b><div>${esc(x.phone||'-')} · ${esc(x.office_name||'-')} · Default ${esc(x.default_shift_id||'-')}</div><button onclick="editEmployee('${x.id}')">แก้ข้อมูล</button></div>`).join('')}</div>`)}
+async function showTeam(){
+  const r=await BA_API.request('team_list');
+  openModal(`<div class="title">ทีมของฉัน</div><div class="list">${r.rows.map(x=>`<div class="item">
+    <b>${esc(x.employee_code)} · ${esc(x.display_name)}</b>
+    <div>${esc(x.phone||'-')} · ${esc(x.office_name||'-')} · Default ${esc(x.default_shift_id||'-')}</div>
+    <div class="grid">
+      <button onclick="editEmployee('${x.id}')">แก้ข้อมูล</button>
+      <button class="red" onclick="inactiveTeamEmployeeFromList('${x.id}')">Inactive</button>
+    </div>
+  </div>`).join('')||'<div class="item">ไม่มี BA ในทีม</div>'}</div>`);
+}
+async function inactiveTeamEmployeeFromList(employee_id){
+  const confirmed=confirm('ยืนยัน Inactive บัญชีพนักงานคนนี้?\nพนักงานจะไม่สามารถเข้าใช้งานหรือลงเวลาได้');
+  if(!confirmed)return;
+  const reason=prompt('กรุณาระบุเหตุผล เช่น ลาออก / สิ้นสุดสัญญา');
+  if(!reason)return;
+  try{
+    await BA_API.request('supervisor_inactive_employee',{employee_id,reason});
+    alert('Inactive บัญชีแล้ว');
+    await renderSupervisorHome();
+    showTeam();
+  }catch(e){alert(e.message)}
+}
 async function editEmployee(id){const r=await BA_API.request('team_employee',{employee_id:id});const e=r.employee;openModal(`<div class="title">แก้ข้อมูล ${esc(e.display_name)}</div><div class="field"><label>ชื่อ</label><input id="eName" value="${esc(e.display_name)}"></div><div class="field"><label>เบอร์โทร</label><input id="ePhone" value="${esc(e.phone||'')}"></div><div class="field"><label>ประเภท BA</label><select id="eMode">${['FIXED_BRANCH','MULTI_BRANCH','STOCK_REFILL'].map(v=>`<option ${v===e.ba_mode?'selected':''}>${v}</option>`).join('')}</select></div><div class="field"><label>สาขา</label><select id="eOffice">${r.offices.map(o=>`<option value="${o.id}" ${o.id===e.assigned_office_id?'selected':''}>${esc(o.office_name)}</option>`).join('')}</select></div><div class="field"><label>Default Shift</label><select id="eShift">${r.shifts.map(s=>`<option value="${s.id}" ${s.id===e.default_shift_id?'selected':''}>${esc(s.shift_name)}</option>`).join('')}</select></div><div class="field"><label>เหตุผล</label><textarea id="eReason"></textarea></div><button class="primary full" onclick="saveEmployee('${id}')">บันทึก</button>`)}
 async function saveEmployee(id){try{await BA_API.request('update_team_employee',{employee_id:id,display_name:$('eName').value,phone:$('ePhone').value,ba_mode:$('eMode').value,assigned_office_id:$('eOffice').value,default_shift_id:$('eShift').value,reason:$('eReason').value});alert('บันทึกแล้ว');showTeam()}catch(e){alert(e.message)}}
 async function openSupervisorShift(){const setup=await BA_API.request('shift_setup');openModal(`<div class="title">ดู/แก้ Shift รายคนทั้งเดือน</div><div class="field"><label>BA</label><select id="svEmp">${setup.employees.map(e=>`<option value="${e.id}">${esc(e.employee_code)} · ${esc(e.display_name)}</option>`).join('')}</select></div><div class="field"><label>เดือน</label><input id="svMonth" type="month" value="${thaiMonth()}"></div><button class="primary full" onclick="loadSupervisorShift()">เปิดตาราง</button>`)}
@@ -563,15 +643,60 @@ async function showApprovalInbox(){
   showLoadingModal('กำลังโหลดรายการรออนุมัติ');
   try{
     const r=await BA_API.request('pending_approvals');
+    const offices=r.offices||[];
     openModal(`<div class="title">รายการรออนุมัติ (${r.counts.total})</div>
       <div class="kpis" style="margin-bottom:12px">
-        <div class="kpi">ลา<strong>${r.counts.leave}</strong></div>
-        <div class="kpi">เปลี่ยนกะ<strong>${r.counts.shift}</strong></div>
-        <div class="kpi">ลงเวลา<strong>${r.counts.attendance}</strong></div>
+        <div class="kpi">BA ใหม่<strong>${r.counts.registration||0}</strong></div>
+        <div class="kpi">ออฟฟิศใหม่<strong>${r.counts.location||0}</strong></div>
+        <div class="kpi">ลา<strong>${r.counts.leave||0}</strong></div>
+        <div class="kpi">เปลี่ยนกะ<strong>${r.counts.shift||0}</strong></div>
+        <div class="kpi">ลงเวลา<strong>${r.counts.attendance||0}</strong></div>
       </div>
 
-      <div class="title">คำขอลา</div>
-      <div class="list">${r.leaves.map(x=>`<div class="item">
+      <div class="title">BA ใหม่รออนุมัติ</div>
+      <div class="list">${(r.registrations||[]).map(x=>`<div class="item">
+        <b>${esc(x.display_name||'-')}</b>
+        <div>ชื่อ–นามสกุล: ${esc(x.full_name||'-')}</div>
+        <div>เบอร์: ${esc(x.phone||'-')}</div>
+        <div>หมายเหตุ: ${esc(x.note||'-')}</div>
+        <div class="field"><label>ประเภท BA</label>
+          <select id="regMode_${x.id}">
+            <option value="FIXED_BRANCH">ประจำสาขา</option>
+            <option value="MULTI_BRANCH">หลายสาขา</option>
+            <option value="STOCK_REFILL">เติมของ</option>
+          </select>
+        </div>
+        <div class="field"><label>ออฟฟิศ</label>
+          <select id="regOffice_${x.id}">
+            ${offices.map(o=>`<option value="${o.id}">${esc(o.office_name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="grid">
+          <button class="green" onclick="reviewRegistrationFromInbox('${x.id}','APPROVED')">อนุมัติ</button>
+          <button class="red" onclick="reviewRegistrationFromInbox('${x.id}','REJECTED')">ไม่อนุมัติ</button>
+        </div>
+      </div>`).join('')||'<div class="item">ไม่มี BA ใหม่รออนุมัติ</div>'}</div>
+
+      <div class="title" style="margin-top:14px">คำขอเพิ่มออฟฟิศใหม่</div>
+      <div class="list">${(r.locations||[]).map(x=>`<div class="item">
+        <b>${esc(x.employees?.employee_code||'')} · ${esc(x.employees?.display_name||'')}</b>
+        <div>ชื่อที่ขอ: ${esc(x.requested_office_name||'-')}</div>
+        <div>Region: ${esc(x.requested_region||'-')}</div>
+        <div>พิกัด: ${Number(x.latitude).toFixed(6)}, ${Number(x.longitude).toFixed(6)}</div>
+        <div>ความแม่นยำ: ${Math.round(Number(x.accuracy_meters||0))} เมตร</div>
+        <div>หมายเหตุ: ${esc(x.employee_note||'-')}</div>
+        <div class="field"><label>รหัสออฟฟิศ</label><input id="locCode_${x.id}" placeholder="เช่น HATYAI-02"></div>
+        <div class="field"><label>ชื่อออฟฟิศ</label><input id="locName_${x.id}" value="${esc(x.requested_office_name||'')}"></div>
+        <div class="field"><label>Region</label><input id="locRegion_${x.id}" value="${esc(x.requested_region||'')}"></div>
+        <div class="field"><label>รัศมี GPS (เมตร)</label><input id="locRadius_${x.id}" inputmode="numeric" value="${Number(x.radius_meters||300)}"></div>
+        <div class="grid">
+          <button class="green" onclick="reviewOfficeLocationFromInbox('${x.id}','APPROVED')">อนุมัติและสร้างออฟฟิศ</button>
+          <button class="red" onclick="reviewOfficeLocationFromInbox('${x.id}','REJECTED')">ไม่อนุมัติ</button>
+        </div>
+      </div>`).join('')||'<div class="item">ไม่มีคำขอเพิ่มออฟฟิศ</div>'}</div>
+
+      <div class="title" style="margin-top:14px">คำขอลา</div>
+      <div class="list">${(r.leaves||[]).map(x=>`<div class="item">
         <b>${esc(x.employees?.employee_code||'')} · ${esc(x.employees?.display_name||'')}</b>
         <div>${esc(x.leave_date)} · ${esc(x.leave_type)}</div>
         <div>เหตุผล: ${esc(x.reason||'-')}</div>
@@ -582,7 +707,7 @@ async function showApprovalInbox(){
       </div>`).join('')||'<div class="item">ไม่มีคำขอลา</div>'}</div>
 
       <div class="title" style="margin-top:14px">คำขอเปลี่ยนกะ/วันหยุด</div>
-      <div class="list">${r.shifts.map(x=>`<div class="item">
+      <div class="list">${(r.shifts||[]).map(x=>`<div class="item">
         <b>${esc(x.employees?.employee_code||'')} · ${esc(x.employees?.display_name||'')}</b>
         <div>${esc(x.request_date)} · ${x.request_type==='DAY_OFF'?'ขอวันหยุด':'ขอเปลี่ยนเป็น '+esc(x.shift_templates?.shift_name||x.requested_shift_id||'-')}</div>
         <div>เหตุผล: ${esc(x.reason||'-')}</div>
@@ -593,7 +718,7 @@ async function showApprovalInbox(){
       </div>`).join('')||'<div class="item">ไม่มีคำขอเปลี่ยนกะ</div>'}</div>
 
       <div class="title" style="margin-top:14px">คำขอลงเวลาย้อนหลัง</div>
-      <div class="list">${r.attendance.map(x=>`<div class="item">
+      <div class="list">${(r.attendance||[]).map(x=>`<div class="item">
         <b>${esc(x.employees?.employee_code||'')} · ${esc(x.employees?.display_name||'')}</b>
         <div>${esc(x.request_date)} · ลืมลง${x.request_side==='IN'?'เข้า':'ออก'}</div>
         <div>สาขา: ${esc(x.offices?.office_name||'-')}</div>
@@ -607,6 +732,42 @@ async function showApprovalInbox(){
     showModalError(e.message);
   }
 }
+
+async function reviewRegistrationFromInbox(id,decision){
+  const note=prompt(decision==='APPROVED'?'หมายเหตุการอนุมัติ':'เหตุผลที่ไม่อนุมัติ');
+  if(!note)return;
+  const payload={request_id:id,decision,note};
+  if(decision==='APPROVED'){
+    payload.ba_mode=$(`regMode_${id}`).value;
+    payload.assigned_office_id=$(`regOffice_${id}`).value;
+  }
+  try{
+    await BA_API.request('supervisor_review_ba_registration',payload);
+    alert(decision==='APPROVED'?'อนุมัติ BA ใหม่แล้ว':'ไม่อนุมัติคำขอแล้ว');
+    await renderSupervisorHome();
+    showApprovalInbox();
+  }catch(e){alert(e.message)}
+}
+
+async function reviewOfficeLocationFromInbox(id,decision){
+  const reviewer_note=prompt(decision==='APPROVED'?'หมายเหตุการอนุมัติออฟฟิศ':'เหตุผลที่ไม่อนุมัติ');
+  if(!reviewer_note)return;
+  const payload={request_id:id,decision,reviewer_note};
+  if(decision==='APPROVED'){
+    payload.office_code=$(`locCode_${id}`).value.trim();
+    payload.office_name=$(`locName_${id}`).value.trim();
+    payload.region=$(`locRegion_${id}`).value.trim();
+    payload.radius_meters=Number($(`locRadius_${id}`).value||300);
+    if(!payload.office_code)return alert('กรุณากรอกรหัสออฟฟิศ');
+  }
+  try{
+    await BA_API.request('supervisor_review_office_location_request',payload);
+    alert(decision==='APPROVED'?'สร้างออฟฟิศใหม่แล้ว':'ไม่อนุมัติคำขอแล้ว');
+    await renderSupervisorHome();
+    showApprovalInbox();
+  }catch(e){alert(e.message)}
+}
+
 
 async function showPendingAttendanceRequests(){showLoadingModal('กำลังโหลดคำขอลงเวลา');try{const r=await BA_API.request('pending_attendance_correction_requests');openModal(`<div class="title">คำขอลงเวลารออนุมัติ</div><div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>วันที่: ${esc(x.request_date)}</div><div>ลืมลงเวลา: ${x.request_side==='IN'?'เข้า':'ออก'}</div><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div class="muted">อนุมัติแล้วจะใช้เวลา${x.request_side==='IN'?'เริ่ม':'เลิก'}กะ และแทนที่ Event ประเภทเดียวกัน</div><div class="grid"><button class="green" onclick="reviewAttendanceCorrectionRequest('${x.id}','APPROVED')">อนุมัติ</button><button class="red" onclick="reviewAttendanceCorrectionRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลารออนุมัติ</div>'}</div>`)}catch(e){showModalError(e.message)}}
 async function reviewAttendanceCorrectionRequest(id,status){const note=prompt('เหตุผล/หมายเหตุ Supervisor');if(!note)return;try{await BA_API.request('review_attendance_correction_request',{request_id:id,status,reviewer_note:note});alert(status==='APPROVED'?'อนุมัติแล้ว ระบบอัปเดต Attendance และสรุปรายวัน/รายเดือนแล้ว':'ปฏิเสธคำขอแล้ว');await renderSupervisorHome();showPendingAttendanceRequests()}catch(e){alert(e.message)}}
@@ -665,7 +826,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.4.1';
+  $('version').textContent='v4.5.0';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -741,7 +902,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.4.1';
+  $('version').textContent='v4.5.0';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
