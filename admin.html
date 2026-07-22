@@ -79,7 +79,7 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
 const $=id=>document.getElementById(id);
 let KEY='',DATA={},current='employees',selectedScheduleCells=new Set(),scheduleEditMode=false;
 const tabs=[
- ['employees','พนักงาน BA'],['supervisors','Supervisor'],['offices','สาขา'],['shifts','Shift'],
+ ['registrations','อนุมัติ BA ใหม่'],['employees','พนักงาน BA'],['supervisors','Supervisor'],['offices','สาขา'],['shifts','Shift'],
  ['schedules','ตารางงาน'],['attendance','Attendance'],['leaves','การลา'],
  ['daily','สรุปรายวัน'],['monthly','สรุปรายเดือน'],['line_logs','LINE Logs'],['audits','Audit Logs']
 ];
@@ -453,6 +453,23 @@ function render(){
  }
 
  const rows=filterRows(DATA[current]||[]);
+ if(current==='registrations'){
+   const pending=rows.filter(x=>x.status==='PENDING');
+   const done=rows.filter(x=>x.status!=='PENDING').slice(0,100);
+   return $('content').innerHTML=`
+    <div class="status">คำขอรออนุมัติ ${pending.length} รายการ · คำขอทั้งหมด ${rows.length} รายการ</div>
+    ${table(['เวลา','ชื่อ','เบอร์','Supervisor ที่เลือก','สถานะ','จัดการ'],pending.map(x=>`<tr>
+      <td>${esc(x.created_at)}</td>
+      <td><b>${esc(x.display_name||x.full_name)}</b><br>${esc(x.full_name||'')}</td>
+      <td>${esc(x.phone)}</td>
+      <td>${esc(x.supervisors?.supervisor_name||x.requested_supervisor_id||'-')}</td>
+      <td>${esc(x.status)}</td>
+      <td><button class="primary" onclick='reviewRegistration(${JSON.stringify(x)},"APPROVED")'>อนุมัติ</button> <button class="danger" onclick='reviewRegistration(${JSON.stringify(x)},"REJECTED")'>ไม่อนุมัติ</button></td>
+    </tr>`))}
+    <h3>ประวัติคำขอ</h3>
+    ${table(['เวลา','ชื่อ','เบอร์','Supervisor','สถานะ'],done.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.display_name||x.full_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.supervisors?.supervisor_name||'-')}</td><td>${esc(x.status)}</td></tr>`))}
+   `;
+ }
  if(current==='employees')return $('content').innerHTML=table(['รหัส','ชื่อ','โหมด','สาขา','Supervisor','Shift','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.employee_code)}</td><td>${esc(x.display_name)}</td><td>${esc(x.ba_mode)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.default_shift_id)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
  if(current==='supervisors')return $('content').innerHTML=table(['รหัส','ชื่อ','โทร','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.supervisor_code)}</td><td>${esc(x.supervisor_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
  if(current==='offices')return $('content').innerHTML=table(['รหัส','สาขา','Region','พิกัด','รัศมี','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.office_code)}</td><td>${esc(x.office_name)}</td><td>${esc(x.region)}</td><td>${esc(x.latitude)}, ${esc(x.longitude)}</td><td>${esc(x.radius_meters)} m</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
@@ -463,7 +480,7 @@ function render(){
  if(current==='audits')return $('content').innerHTML=table(['เวลา','Action','Entity','ID','เหตุผล','ก่อน','หลัง'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)}</td><td>${esc(x.entity_id)}</td><td>${esc(x.reason)}</td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.before_data,null,2))}</pre></details></td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.after_data,null,2))}</pre></details></td></tr>`));
 }
 function buttons(x){return `<button onclick='editRow(${JSON.stringify(x)})'>แก้</button> <button class="danger" onclick='deleteRow(${JSON.stringify(x)})'>ลบ</button>`}
-function createCurrent(){if(['daily','monthly','line_logs','audits'].includes(current))return msg('หน้านี้เป็นข้อมูลสรุป/ประวัติ ไม่เพิ่มโดยตรง',true);editRow({})}
+function createCurrent(){if(['registrations','daily','monthly','line_logs','audits'].includes(current))return msg('หน้านี้เป็นข้อมูลสรุป/ประวัติ ไม่เพิ่มโดยตรง',true);editRow({})}
 function opts(list,val,label){return `<option value="">-</option>`+(list||[]).map(x=>`<option value="${x.id}" ${x.id===val?'selected':''}>${esc(x[label]||x.id)}</option>`).join('')}
 function field(id,label,value='',type='text'){return `<div class="field"><label>${label}</label><input id="${id}" type="${type}" value="${esc(value)}"></div>`}
 function select(id,label,html){return `<div class="field"><label>${label}</label><select id="${id}">${html}</select></div>`}
@@ -505,6 +522,27 @@ async function deleteRow(x){
  const map={employees:'delete_employee',supervisors:'delete_supervisor',offices:'delete_office',shifts:'delete_shift',schedules:'delete_schedule',attendance:'delete_attendance',leaves:'delete_leave'};
  try{await api(map[current],{id:x.id,reason});await refreshAll();msg('ลบแล้ว')}catch(e){msg(e.message,true)}
 }
+async function reviewRegistration(x,decision){
+ try{
+  const reason=prompt(decision==='APPROVED'?'เหตุผล/หมายเหตุการอนุมัติ':'เหตุผลที่ไม่อนุมัติ');
+  if(!reason)return;
+  const p={id:x.id,decision,reason};
+  if(decision==='APPROVED'){
+    const supOpts=(DATA.supervisors||[]).map(s=>`${s.id} = ${s.supervisor_name}`).join('\n');
+    const officeOpts=(DATA.offices||[]).filter(o=>o.active!==false).map(o=>`${o.id} = ${o.office_name}`).join('\n');
+    const shiftOpts=(DATA.shifts||[]).filter(s=>s.active!==false).map(s=>`${s.id} = ${s.shift_name||s.id}`).join('\n');
+    p.supervisor_id=prompt(`Supervisor ID\n${supOpts}`,x.requested_supervisor_id||'')||x.requested_supervisor_id;
+    p.assigned_office_id=prompt(`Office ID\n${officeOpts}`,(DATA.offices||[]).find(o=>o.active!==false)?.id||'');
+    p.default_shift_id=prompt(`Shift ID\n${shiftOpts}`,(DATA.shifts||[]).find(s=>s.active!==false)?.id||'');
+    p.ba_mode=prompt('ประเภท BA: FIXED_BRANCH / MULTI_BRANCH / STOCK_REFILL','FIXED_BRANCH')||'FIXED_BRANCH';
+    if(!p.assigned_office_id||!p.default_shift_id)return alert('ต้องเลือก Office และ Shift');
+  }
+  await api('review_ba_registration',p);
+  await refreshAll();
+  msg(decision==='APPROVED'?'อนุมัติ BA ใหม่แล้ว':'ปฏิเสธคำขอแล้ว');
+ }catch(e){msg(e.message,true);alert(e.message)}
+}
+
 async function sendReport(type){
  const date=prompt('วันที่รายงาน YYYY-MM-DD',new Date().toISOString().slice(0,10));if(!date)return;
  const reason=prompt('เหตุผลการส่งรายงาน','ส่งจาก Admin');
