@@ -27,7 +27,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.5.1 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.5.6 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -125,7 +125,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.5.1';
+      $('version').textContent='v4.5.6';
       await renderExternalEmployeeHome();
       return;
     }
@@ -142,7 +142,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.5.1';
+    $('version').textContent='v4.5.6';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -188,10 +188,15 @@ async function renderEmployeeHome(){
   $('employeeView').innerHTML=`
     <div class="card">
       <div class="title">วันนี้</div>
-      <div class="status">สถานะ: ${esc(labels[r.state.label]||r.state.label)}
-สาขาปัจจุบัน: ${esc(r.state.office_name||'-')}
-Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}
-สาย: ${hm(r.summary?.late_minutes||0)} · เกิน: ${hm(r.summary?.over_minutes||0)} · ขาด: ${hm(r.summary?.short_minutes||0)}</div>
+      <div class="status">
+        <div><b>สถานะ:</b> ${esc(labels[r.state.label]||r.state.label)}</div>
+        <div><b>สาขาปัจจุบัน:</b> ${esc(r.state.office_name||'-')}</div>
+        <div><b>Shift:</b> ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}</div>
+        <div><b>ทำงานสะสม:</b> ${hm(r.summary?.is_working?r.summary?.live_work_minutes:r.summary?.credited_minutes||0)}
+          ${r.summary?.is_on_break?` · <b>กำลังพัก:</b> ${hm(r.summary?.current_break_minutes||0)}`:''}
+        </div>
+        <div><b>พักรวม:</b> ${hm(r.summary?.break_minutes||0)} · <b>เกิน:</b> ${hm(r.summary?.over_minutes||0)} · <b>ขาด:</b> ${hm(r.summary?.short_minutes||0)}</div>
+      </div>
       <div class="grid" id="actionGrid"></div>
     </div>
     <div class="card">
@@ -199,7 +204,7 @@ Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.s
       <div class="list">${timelineHtml}</div>
       <div class="item" style="margin-top:10px">
         <div>เข้างาน ${esc(r.summary?.first_in||'-')} · ออกงาน ${esc(r.summary?.last_out||'-')}</div>
-        <div>ทำงาน ${hm(r.summary?.credited_minutes||0)} · พัก ${hm(r.summary?.break_minutes||0)} · เติมของ ${hm(r.summary?.refill_minutes||0)}</div>
+        <div>ทำงาน ${hm(r.summary?.is_working?r.summary?.live_work_minutes:r.summary?.credited_minutes||0)} · พัก ${hm(r.summary?.break_minutes||0)} · เติมของ ${hm(r.summary?.refill_minutes||0)}</div>
       </div>
     </div>
     <div class="card">
@@ -234,7 +239,7 @@ function geolocationErrorMessage(err){
   if(err.code===1)return 'iPhone ปฏิเสธสิทธิ์ Location ให้เปิด Settings → Privacy & Security → Location Services → LINE → While Using the App และเปิด Precise Location';
   if(err.code===2)return 'ไม่พบตำแหน่งในขณะนี้ กรุณาเปิด Wi‑Fi หรือ 4G/5G แล้วลองใหม่ในบริเวณที่รับสัญญาณได้';
   if(err.code===3)return 'ค้นหาตำแหน่งนานเกินไป กรุณาออกไปใกล้หน้าร้านหรือพื้นที่เปิด แล้วลองใหม่';
-  if(err.code===4)return `${err.message||'ความแม่นยำ GPS ต่ำเกินไป'} กรุณาเปิด Wi‑Fi, ปิดโหมดประหยัดพลังงาน และลองใหม่ใกล้หน้าร้าน`;
+  if(err.code===4)return `${err.message||'ความแม่นยำ GPS ต่ำเกินไป'} ระบบต้องการไม่เกิน ${LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS} เมตร กรุณาเปิด Wi‑Fi, เปิด Precise Location, ปิดโหมดประหยัดพลังงาน และลองใหม่ใกล้หน้าร้านหรือพื้นที่เปิด`;
   return `Location Error ${err.code||''}: ${err.message||'ไม่ทราบสาเหตุ'}`;
 }
 
@@ -267,8 +272,15 @@ function getPosition(options){
     navigator.geolocation.getCurrentPosition(resolve,reject,options);
   });
 }
+const LOCATION_TARGET_ACCURACY_METERS=80;
+const LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS=200;
+const LOCATION_WATCH_TIMEOUT_MS=45000;
+const LOCATION_MAX_POSITION_AGE_MS=15000;
+
 async function requestBestLocation(){
-  if(!navigator.geolocation)throw {code:0,message:'อุปกรณ์นี้ไม่รองรับ Geolocation'};
+  if(!navigator.geolocation){
+    throw {code:0,message:'อุปกรณ์นี้ไม่รองรับ Geolocation'};
+  }
 
   return await new Promise((resolve,reject)=>{
     let best=null;
@@ -296,10 +308,19 @@ async function requestBestLocation(){
     };
 
     watchId=navigator.geolocation.watchPosition(position=>{
-      if(!best || Number(position.coords.accuracy||999999)<Number(best.coords.accuracy||999999)){
+      const accuracy=Number(position.coords.accuracy||999999);
+      const age=Date.now()-Number(position.timestamp||Date.now());
+
+      // ไม่ใช้พิกัดเก่าที่ระบบหรือเบราว์เซอร์ cache ไว้
+      if(age>LOCATION_MAX_POSITION_AGE_MS)return;
+      if(!Number.isFinite(accuracy)||accuracy<=0)return;
+
+      if(!best||accuracy<Number(best.coords.accuracy||999999)){
         best=position;
       }
-      if(Number(position.coords.accuracy||999999)<=500){
+
+      // ได้ความแม่นยำดีแล้ว จบได้ทันที
+      if(accuracy<=LOCATION_TARGET_ACCURACY_METERS){
         finishSuccess(position);
       }
     },error=>{
@@ -307,22 +328,25 @@ async function requestBestLocation(){
     },{
       enableHighAccuracy:true,
       maximumAge:0,
-      timeout:30000
+      timeout:LOCATION_WATCH_TIMEOUT_MS
     });
 
     timer=setTimeout(()=>{
-      if(best && Number(best.coords.accuracy||999999)<=500){
+      const bestAccuracy=Number(best?.coords?.accuracy||999999);
+
+      // ถ้ายังไม่ถึงเป้าหมาย แต่ไม่เกินเพดาน 200 เมตร ให้ใช้ค่าที่ดีที่สุด
+      if(best&&bestAccuracy<=LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS){
         finishSuccess(best);
       }else if(best){
         finishError({
           code:4,
-          accuracy:Number(best.coords.accuracy||0),
-          message:`ความแม่นยำ GPS ยังต่ำเกินไป (${Math.round(Number(best.coords.accuracy||0))} เมตร)`
+          accuracy:bestAccuracy,
+          message:`ความแม่นยำ GPS ยังต่ำเกินไป (${Math.round(bestAccuracy)} เมตร)`
         });
       }else{
         finishError({code:3,message:'ค้นหาตำแหน่งไม่สำเร็จ'});
       }
-    },30000);
+    },LOCATION_WATCH_TIMEOUT_MS);
   });
 }
 async function testLocation(){
@@ -826,7 +850,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.5.1';
+  $('version').textContent='v4.5.6';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -902,7 +926,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.5.1';
+  $('version').textContent='v4.5.6';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
