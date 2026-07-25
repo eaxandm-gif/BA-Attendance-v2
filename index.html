@@ -27,7 +27,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.5.6 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.5.7 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -125,7 +125,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.5.6';
+      $('version').textContent='v4.5.7';
       await renderExternalEmployeeHome();
       return;
     }
@@ -142,7 +142,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.5.6';
+    $('version').textContent='v4.5.7';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -239,7 +239,7 @@ function geolocationErrorMessage(err){
   if(err.code===1)return 'iPhone ปฏิเสธสิทธิ์ Location ให้เปิด Settings → Privacy & Security → Location Services → LINE → While Using the App และเปิด Precise Location';
   if(err.code===2)return 'ไม่พบตำแหน่งในขณะนี้ กรุณาเปิด Wi‑Fi หรือ 4G/5G แล้วลองใหม่ในบริเวณที่รับสัญญาณได้';
   if(err.code===3)return 'ค้นหาตำแหน่งนานเกินไป กรุณาออกไปใกล้หน้าร้านหรือพื้นที่เปิด แล้วลองใหม่';
-  if(err.code===4)return `${err.message||'ความแม่นยำ GPS ต่ำเกินไป'} ระบบต้องการไม่เกิน ${LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS} เมตร กรุณาเปิด Wi‑Fi, เปิด Precise Location, ปิดโหมดประหยัดพลังงาน และลองใหม่ใกล้หน้าร้านหรือพื้นที่เปิด`;
+  if(err.code===4)return `${err.message||'ความแม่นยำ GPS ต่ำเกินไป'} ระบบจะเทียบกับรัศมีของสาขา กรุณาเปิด Wi‑Fi, เปิด Precise Location, ปิดโหมดประหยัดพลังงาน และลองใหม่ใกล้หน้าร้านหรือพื้นที่เปิด`;
   return `Location Error ${err.code||''}: ${err.message||'ไม่ทราบสาเหตุ'}`;
 }
 
@@ -273,7 +273,7 @@ function getPosition(options){
   });
 }
 const LOCATION_TARGET_ACCURACY_METERS=80;
-const LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS=200;
+const LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS=2500;
 const LOCATION_WATCH_TIMEOUT_MS=45000;
 const LOCATION_MAX_POSITION_AGE_MS=15000;
 
@@ -850,7 +850,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.5.6';
+  $('version').textContent='v4.5.7';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -926,7 +926,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.5.6';
+  $('version').textContent='v4.5.7';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
