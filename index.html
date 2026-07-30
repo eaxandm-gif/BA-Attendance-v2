@@ -27,7 +27,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.5.7 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.5.8 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -125,7 +125,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.5.7';
+      $('version').textContent='v4.5.8';
       await renderExternalEmployeeHome();
       return;
     }
@@ -142,7 +142,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.5.7';
+    $('version').textContent='v4.5.8';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -451,7 +451,7 @@ function showMyHistory(){
     showLoadingModal('กำลังโหลดประวัติ');
     try{
       const r=await BA_API.request('employee_history_detail',{month});
-      openModal(`<div class="title">ประวัติของฉัน ${month}</div><div class="list">${r.rows.map(x=>`<div class="item"><div class="row"><b>${esc(x.work_date)}</b><span class="badge">${esc(x.shift_name||'-')}</span></div><div>เข้า ${esc(x.first_in_time||'-')} · ออก ${esc(x.last_out_time||'-')} · สาย ${hm(x.late_minutes)} · เกิน ${hm(x.over_minutes)}</div><div>ทำงาน ${hm(x.credited_minutes)} · พัก ${hm(x.break_minutes)} · ขาด ${hm(x.short_minutes)}</div><div class="timeline">${x.events.map(e=>`<div>${esc(e.time)} — ${esc(e.label)}${e.office_name?' @ '+esc(e.office_name):''}</div>`).join('')||'<span class="muted">ไม่มีรายการกดเวลา</span>'}</div></div>`).join('')||'<div class="item">ไม่มีประวัติในเดือนนี้</div>'}</div>`);
+      openModal(`<div class="title">ประวัติของฉัน ${month}</div><div class="list">${r.rows.map(x=>`<div class="item"><div class="row"><b>${esc(x.work_date)}</b><span class="badge">${esc(x.shift_name||'-')}</span></div><div>เข้า ${esc(x.first_in_time||'-')} · ออก ${esc(x.last_out_time||'-')} · เกิน ${hm(x.over_minutes)}</div><div>ทำงาน ${hm(x.credited_minutes)} · พัก ${hm(x.break_minutes)} · ขาด ${hm(x.short_minutes)}</div>${x.missing_summary?'<div class="muted">ไม่มี Summary ของวันนี้ ระบบเติมวันให้ครบเดือนในหน้าประวัติ</div>':''}<div class="timeline">${x.events.map(e=>`<div>${esc(e.time)} — ${esc(e.label)}${e.office_name?' @ '+esc(e.office_name):''}</div>`).join('')||'<span class="muted">ไม่มีรายการกดเวลา</span>'}</div></div>`).join('')||'<div class="item">ไม่มีประวัติในเดือนนี้</div>'}</div>`);
     }catch(e){showModalError(e.message)}
   });
 }
@@ -850,7 +850,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.5.7';
+  $('version').textContent='v4.5.8';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -926,7 +926,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.5.7';
+  $('version').textContent='v4.5.8';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
