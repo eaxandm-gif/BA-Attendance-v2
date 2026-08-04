@@ -27,7 +27,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.5.8 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.5.9 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -125,7 +125,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.5.8';
+      $('version').textContent='v4.5.9';
       await renderExternalEmployeeHome();
       return;
     }
@@ -142,7 +142,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.5.8';
+    $('version').textContent='v4.5.9';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -582,6 +582,7 @@ async function renderSupervisorHome(){
   try{
     const r=await BA_API.request('supervisor_dashboard_v2');
     k=r.kpis||k;
+    window.SUPERVISOR_KPI_LISTS=r.lists||{};
   }catch(e){
     dashboardError=e.message||'โหลด Dashboard ไม่สำเร็จ';
   }
@@ -591,14 +592,14 @@ async function renderSupervisorHome(){
     <div class="card">
       <div class="title">ภาพรวมทีมวันนี้</div>
       <div class="kpis">
-        <div class="kpi">พนักงานทั้งหมด<strong>${k.total}</strong></div>
-        <div class="kpi">เข้างานแล้ว<strong>${k.checked_in}</strong></div>
-        <div class="kpi">ออกงานแล้ว<strong>${k.checked_out}</strong></div>
-        <div class="kpi">กำลังทำงาน<strong>${k.working}</strong></div>
-        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showTeamOnBreak()">กำลังพัก<strong>${k.on_break||0}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
-        <div class="kpi">มาสาย<strong>${k.late}</strong></div>
-        <div class="kpi">ลา<strong>${k.leave}</strong></div>
-        <div class="kpi">ข้อมูลไม่ครบ<strong>${k.incomplete}</strong></div>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('total','พนักงานทั้งหมด')">พนักงานทั้งหมด<strong>${k.total}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('checked_in','เข้างานแล้ว')">เข้างานแล้ว<strong>${k.checked_in}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('checked_out','ออกงานแล้ว')">ออกงานแล้ว<strong>${k.checked_out}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('working','กำลังทำงาน')">กำลังทำงาน<strong>${k.working}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('on_break','กำลังพัก')">กำลังพัก<strong>${k.on_break||0}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('late','มาสาย')">มาสาย<strong>${k.late}</strong><span class="muted">ไม่คิดสายแล้ว</span></button>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('leave','ลา')">ลา<strong>${k.leave}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
+        <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('incomplete','ข้อมูลไม่ครบ')">ข้อมูลไม่ครบ<strong>${k.incomplete}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
         <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showApprovalInbox()">รออนุมัติทั้งหมด<strong>${k.pending_total||k.pending_attendance||0}</strong><span class="muted">แตะเพื่อตรวจสอบ</span></button>
       </div>
     </div>
@@ -613,6 +614,33 @@ async function renderSupervisorHome(){
         <button onclick="showMonthlyV2()">สรุปรายเดือน</button>
       </div>
     </div>`;
+}
+
+function showSupervisorKpiList(key,title){
+  const rows=(window.SUPERVISOR_KPI_LISTS&&window.SUPERVISOR_KPI_LISTS[key])||[];
+  const subtitle={
+    total:'BA active ทั้งหมดในทีมของ Supervisor',
+    checked_in:'BA ที่มีเวลาเข้างานวันนี้',
+    checked_out:'BA ที่มีเวลาออกงานวันนี้',
+    working:'BA ที่เข้างานแล้วแต่ยังไม่ออกงาน',
+    on_break:'BA ที่ Event ล่าสุดคือออกพัก',
+    late:'ระบบไม่คิดสายแล้ว จึงควรเป็น 0',
+    leave:'BA ที่มีคำลาอนุมัติวันนี้',
+    incomplete:'BA ที่ข้อมูล Profile ยังไม่ครบ'
+  }[key]||'';
+
+  openModal(`<div class="title">${esc(title)} (${rows.length})</div>
+    ${subtitle?`<div class="muted" style="margin-bottom:10px">${esc(subtitle)}</div>`:''}
+    <div class="list">${rows.map(x=>`<div class="item">
+      <div class="row">
+        <b>${esc(x.employee_code||'-')} · ${esc(x.display_name||'-')}</b>
+        ${x.last_time?`<span class="badge">${esc(x.last_time)}</span>`:''}
+      </div>
+      <div>สาขาปัจจุบัน: ${esc(x.office_name||'ไม่ระบุสาขา')}</div>
+      ${x.phone?`<div>เบอร์: ${esc(x.phone)}</div>`:''}
+      ${x.last_event?`<div>Event ล่าสุด: ${esc(labels[x.last_event]||x.last_event)}</div>`:''}
+      ${x.elapsed_minutes!=null?`<div>พักมาแล้ว: ${Number(x.elapsed_minutes||0)} นาที</div>`:''}
+    </div>`).join('')||'<div class="item">ไม่มีรายการในหมวดนี้</div>'}</div>`);
 }
 
 async function showTeamOnBreak(){
@@ -850,7 +878,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.5.8';
+  $('version').textContent='v4.5.9';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -926,7 +954,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.5.8';
+  $('version').textContent='v4.5.9';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
