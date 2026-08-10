@@ -260,11 +260,17 @@ function summaryForEmployeeDate(emp,date){
  const summary=(DATA.daily||[]).find(s=>s.employee_id===emp.id&&s.work_date===date)||null;
  const schedule=(DATA.schedules||[]).find(s=>s.employee_id===emp.id&&s.work_date===date);
  const approvedLeave=(DATA.leaves||[]).find(l=>l.employee_id===emp.id&&l.leave_date===date&&l.status==='APPROVED');
+ const events=(DATA.attendance||[]).filter(e=>e.employee_id===emp.id&&bangkokDateKey(e.occurred_at)===date).sort((a,b)=>new Date(a.occurred_at)-new Date(b.occurred_at));
+ const workInTypes=new Set(['IN','DAY_IN','BRANCH_IN','WORK_IN','REFILL_IN']);
+ const workOutTypes=new Set(['OUT','DAY_OUT','BRANCH_OUT','WORK_OUT','REFILL_OUT']);
+ const firstEventIn=events.find(e=>workInTypes.has(e.event_type))||null;
+ const lastEventOut=[...events].reverse().find(e=>workOutTypes.has(e.event_type))||null;
  const shiftId=summary?.shift_id||schedule?.shift_id||emp.default_shift_id||null;
  const shift=(DATA.shifts||[]).find(s=>s.id===shiftId)||null;
  const today=bangkokDateKey(new Date());
 
  let status=summary?.status||approvedLeave?.leave_type||schedule?.schedule_status||'WORK';
+ if(!summary&&!approvedLeave&&events.length)status=firstEventIn&&lastEventOut?'COMPLETED':'WORKING';
  if(status==='WORK'){
    if(date<today)status='ABSENT';
    else if(date===today)status='NOT_STARTED';
@@ -273,7 +279,19 @@ function summaryForEmployeeDate(emp,date){
 
  const offices=Array.isArray(summary?.branch_names)
    ?summary.branch_names.join(', ')
-   :(summary?.branch_names||'');
+   :(summary?.branch_names||[...new Set(events.map(e=>e.offices?.office_name).filter(Boolean))].join(', '));
+ const firstInValue=summary?.first_in||firstEventIn?.occurred_at||null;
+ const lastOutValue=summary?.last_out||lastEventOut?.occurred_at||null;
+ const fallbackBreak=pairDuration(events,'BREAK_OUT','BREAK_IN');
+ const fallbackSpan=firstEventIn&&lastEventOut?durationBetween(eventMinutes(firstEventIn),eventMinutes(lastEventOut)):0;
+ const fallbackCredited=Math.max(0,fallbackSpan-fallbackBreak);
+ const fallbackRefill=pairDuration(events,'REFILL_IN','REFILL_OUT');
+ const required=Number(summary?.required_minutes||schedule?.required_minutes||shift?.required_minutes||0);
+ const credited=Number(summary?.credited_minutes||summary?.work_minutes||(summary?0:fallbackCredited));
+ const shiftStartMinutes=minutesOfDayFromHHMM(summary?.shift_start||shift?.start_time);
+ const fallbackLate=firstEventIn&&shiftStartMinutes!=null?Math.max(0,eventMinutes(firstEventIn)-shiftStartMinutes-Number(shift?.grace_minutes||0)):0;
+ const fallbackShort=status==='COMPLETED'&&required>credited?required-credited:0;
+ const fallbackOver=status==='COMPLETED'&&credited>required?credited-required:0;
 
  return {
    work_date:date,
@@ -287,19 +305,19 @@ function summaryForEmployeeDate(emp,date){
    shift_name:shift?.shift_name||shiftId||'',
    shift_start:summary?.shift_start?String(summary.shift_start).slice(0,5):(shift?.start_time?String(shift.start_time).slice(0,5):''),
    shift_end:summary?.shift_end?String(summary.shift_end).slice(0,5):(shift?.end_time?String(shift.end_time).slice(0,5):''),
-   first_in:summary?.first_in?bangkokTime(summary.first_in):'',
-   last_out:summary?.last_out?bangkokTime(summary.last_out):'',
-   late_minutes:Number(summary?.late_minutes||0),
-   credited_minutes:Number(summary?.credited_minutes||summary?.work_minutes||0),
-   break_minutes:Number(summary?.break_minutes||0),
-   refill_minutes:Number(summary?.refill_minutes||0),
-   required_minutes:Number(summary?.required_minutes||shift?.required_minutes||0),
-   short_minutes:Number(summary?.short_minutes||0),
-   over_minutes:Number(summary?.over_minutes||0),
-   net_minutes:Number(summary?.net_minutes||0),
+   first_in:firstInValue?bangkokTime(firstInValue):'',
+   last_out:lastOutValue?bangkokTime(lastOutValue):'',
+   late_minutes:Number(summary?.late_minutes||(summary?0:fallbackLate)),
+   credited_minutes:credited,
+   break_minutes:Number(summary?.break_minutes||(summary?0:fallbackBreak)),
+   refill_minutes:Number(summary?.refill_minutes||(summary?0:fallbackRefill)),
+   required_minutes:required,
+   short_minutes:Number(summary?.short_minutes||(summary?0:fallbackShort)),
+   over_minutes:Number(summary?.over_minutes||(summary?0:fallbackOver)),
+   net_minutes:Number(summary?.net_minutes||(summary?0:(status==='COMPLETED'?credited-required:0))),
    offices,
-   issue:summary?.issue||'',
-   has_events:Boolean(summary?.first_in||summary?.last_out)
+   issue:summary?.issue||(!summary&&events.length&&!(firstEventIn&&lastEventOut)?'INCOMPLETE_EVENT':''),
+   has_events:Boolean(summary?.first_in||summary?.last_out||events.length)
  };
 }
 function buildDailySummary(date){
@@ -312,6 +330,7 @@ function relevantDatesForEmployeeMonth(emp,month){
  (DATA.daily||[]).filter(s=>s.employee_id===emp.id&&String(s.work_date||'').startsWith(month)).forEach(s=>set.add(s.work_date));
  (DATA.schedules||[]).filter(s=>s.employee_id===emp.id&&String(s.work_date||'').startsWith(month)).forEach(s=>set.add(s.work_date));
  (DATA.leaves||[]).filter(l=>l.employee_id===emp.id&&String(l.leave_date||'').startsWith(month)&&l.status==='APPROVED').forEach(l=>set.add(l.leave_date));
+ (DATA.attendance||[]).filter(e=>e.employee_id===emp.id&&bangkokDateKey(e.occurred_at).startsWith(month)).forEach(e=>set.add(bangkokDateKey(e.occurred_at)));
  return [...set].sort();
 }
 function matrixStatusForDate(emp,date,eventMap){
