@@ -47,6 +47,8 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
       <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
       <input id="dailyDate" class="hidden" type="date" onchange="render()" style="max-width:180px">
       <input id="monthlyMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
+      <select id="monthlySupervisor" class="hidden" onchange="render()" style="max-width:200px"><option value="">Supervisor ทั้งหมด</option></select>
+      <select id="monthlyRegion" class="hidden" onchange="render()" style="max-width:200px"><option value="">Region ทั้งหมด</option></select>
       <input id="attendanceFrom" class="hidden" type="date" onchange="loadAttendanceHistory()" title="Attendance ตั้งแต่วันที่" style="max-width:180px">
       <input id="attendanceTo" class="hidden" type="date" onchange="loadAttendanceHistory()" title="Attendance ถึงวันที่" style="max-width:180px">
       <button id="recalcSummaryBtn" class="hidden" onclick="recalculateCurrentSummary()">คำนวณใหม่</button>
@@ -293,6 +295,47 @@ function relevantDatesForEmployeeMonth(emp,month){
  (DATA.leaves||[]).filter(l=>l.employee_id===emp.id&&String(l.leave_date||'').startsWith(month)&&l.status==='APPROVED').forEach(l=>set.add(l.leave_date));
  return [...set].sort();
 }
+function matrixStatusForDate(emp,date){
+ const today=bangkokDateKey(new Date());
+ if(date>=today)return '';
+ const leave=(DATA.leaves||[]).find(l=>l.employee_id===emp.id&&l.leave_date===date&&l.status==='APPROVED');
+ if(leave)return leave.leave_type==='SICK_LEAVE'?'SICK':'HOL';
+ const schedule=(DATA.schedules||[]).find(s=>s.employee_id===emp.id&&s.work_date===date);
+ if(schedule?.schedule_status==='SICK_LEAVE')return 'SICK';
+ if(['BUSINESS_LEAVE','VACATION'].includes(schedule?.schedule_status))return 'HOL';
+ if(schedule?.schedule_status==='OFF')return 'OFF';
+ const summary=(DATA.daily||[]).find(s=>s.employee_id===emp.id&&s.work_date===date);
+ if(summary){
+   const hasIn=Boolean(summary.first_in),hasOut=Boolean(summary.last_out);
+   if((hasIn&&!hasOut)||(!hasIn&&hasOut)||summary.issue)return 'INC';
+   if(['COMPLETED','WORKING'].includes(summary.status)||hasIn||hasOut)return 'WORK';
+   if(summary.status==='SICK_LEAVE')return 'SICK';
+   if(['BUSINESS_LEAVE','VACATION'].includes(summary.status))return 'HOL';
+   if(summary.status==='OFF')return 'OFF';
+ }
+ return 'OFF';
+}
+function buildMonthlyMatrix(month){
+ const supervisor=$('monthlySupervisor').value;
+ const region=$('monthlyRegion').value;
+ const total=daysInMonth(month);
+ return (DATA.employees||[]).filter(emp=>{
+   if(emp.active===false&&!relevantDatesForEmployeeMonth(emp,month).length)return false;
+   if(supervisor&&emp.supervisor_id!==supervisor)return false;
+   if(region&&emp.offices?.region!==region)return false;
+   return true;
+ }).map(emp=>{
+   const row={employee_code:emp.employee_code,display_name:emp.display_name,supervisor_name:emp.supervisors?.supervisor_name||'',region:emp.offices?.region||''};
+   const counts={WORK:0,OFF:0,SICK:0,HOL:0,INC:0};
+   for(let day=1;day<=total;day++){
+     const date=`${month}-${String(day).padStart(2,'0')}`;
+     const status=matrixStatusForDate(emp,date);
+     row[`day_${day}`]=status;
+     if(status)counts[status]++;
+   }
+   return {...row,...counts};
+ });
+}
 function buildMonthlySummary(month){
  return (DATA.employees||[]).filter(emp=>
    emp.active!==false||relevantDatesForEmployeeMonth(emp,month).length>0
@@ -377,48 +420,21 @@ function renderDailySummary(){
 function renderMonthlySummary(){
  const month=$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7);
  const q=$('search').value.trim().toLowerCase();
- const rows=buildMonthlySummary(month).filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q));
+ const rows=buildMonthlyMatrix(month).filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q));
  window.__currentSummaryRows=rows;
- const k={
-   employees:rows.length,
-   workDays:rows.reduce((a,r)=>a+r.work_days,0),
-   lateDays:rows.reduce((a,r)=>a+r.late_days,0),
-   lateMinutes:rows.reduce((a,r)=>a+r.late_minutes,0),
-   short:rows.reduce((a,r)=>a+r.short_minutes,0),
-   over:rows.reduce((a,r)=>a+r.over_minutes,0)
- };
+ const k={employees:rows.length,work:rows.reduce((a,r)=>a+r.WORK,0),off:rows.reduce((a,r)=>a+r.OFF,0),sick:rows.reduce((a,r)=>a+r.SICK,0),hol:rows.reduce((a,r)=>a+r.HOL,0),inc:rows.reduce((a,r)=>a+r.INC,0)};
  const kpis=`<div class="summary-kpis">
   <div class="summary-kpi">พนักงาน<strong>${k.employees}</strong></div>
-  <div class="summary-kpi">วันทำงานรวม<strong>${k.workDays}</strong></div>
-  <div class="summary-kpi">วันสายรวม<strong>${k.lateDays}</strong></div>
-  <div class="summary-kpi">นาทีสายรวม<strong>${k.lateMinutes}</strong></div>
-  <div class="summary-kpi">เวลาขาดรวม<strong>${fmtMinutes(k.short)}</strong></div>
-  <div class="summary-kpi">เวลาเกินรวม<strong>${fmtMinutes(k.over)}</strong></div>
+  <div class="summary-kpi">WORK<strong>${k.work}</strong></div>
+  <div class="summary-kpi">OFF<strong>${k.off}</strong></div>
+  <div class="summary-kpi">SICK<strong>${k.sick}</strong></div>
+  <div class="summary-kpi">HOL<strong>${k.hol}</strong></div>
+  <div class="summary-kpi">INC<strong>${k.inc}</strong></div>
  </div>`;
- const body=table(
-  ['เดือน','พนักงาน','Supervisor','วันทำงาน','จบงาน','วันสาย','นาทีสาย','ขาดงาน','ยังไม่เข้างาน','OFF','ลาป่วย','ลากิจ','ลาพักร้อน','ทำงาน','เติมของ','ขาด','เกิน','Net'],
-  rows.map(r=>`<tr>
-   <td>${esc(r.month)}</td>
-   <td><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>
-   <td>${esc(r.supervisor_name)}</td>
-   <td>${r.work_days}</td>
-   <td>${r.completed_days}</td>
-   <td>${r.late_days}</td>
-   <td>${r.late_minutes}</td>
-   <td>${r.absent_days}</td>
-   <td>${r.not_started_days}</td>
-   <td>${r.off_days}</td>
-   <td>${r.sick_leave_days}</td>
-   <td>${r.business_leave_days}</td>
-   <td>${r.vacation_days}</td>
-   <td>${fmtMinutes(r.work_minutes)}</td>
-   <td>${fmtMinutes(r.refill_minutes)}</td>
-   <td>${fmtMinutes(r.short_minutes)}</td>
-   <td>${fmtMinutes(r.over_minutes)}</td>
-   <td>${fmtMinutes(r.net_minutes)}</td>
-  </tr>`)
- );
- $('content').innerHTML=kpis+body;
+ const total=daysInMonth(month);
+ const headers=['BA',...Array.from({length:total},(_,i)=>String(i+1)),'WORK','OFF','SICK','HOL','INC'];
+ const body=table(headers,rows.map(r=>`<tr><td class="emp"><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>${Array.from({length:total},(_,i)=>`<td><span class="badge">${esc(r[`day_${i+1}`]||'-')}</span></td>`).join('')}<td>${r.WORK}</td><td>${r.OFF}</td><td>${r.SICK}</td><td>${r.HOL}</td><td>${r.INC}</td></tr>`));
+ $('content').innerHTML=kpis+`<div class="muted" style="margin-bottom:8px">WORK = ทำงาน · OFF = หยุด · SICK = ลาป่วย · HOL = ลาอื่น · INC = ข้อมูลลงเวลาไม่ครบ</div>`+body;
 }
 function csvEscape(v){
  const s=String(v??'');
@@ -426,12 +442,9 @@ function csvEscape(v){
 }
 function excelRowsForCurrentSummary(rows){
  if(current==='monthly')return rows.map(r=>({
-   'เดือน':r.month,'รหัสพนักงาน':r.employee_code,'ชื่อพนักงาน':r.display_name,'Supervisor':r.supervisor_name,
-   'วันทำงาน':r.work_days,'จบงาน':r.completed_days,'วันสาย':r.late_days,'นาทีสาย':r.late_minutes,
-   'ขาดงาน':r.absent_days,'ยังไม่เข้างาน':r.not_started_days,'OFF':r.off_days,
-   'ลาป่วย':r.sick_leave_days,'ลากิจ':r.business_leave_days,'ลาพักร้อน':r.vacation_days,
-   'นาทีทำงาน':r.work_minutes,'นาทีเติมของ':r.refill_minutes,'นาทีขาด':r.short_minutes,
-   'นาทีเกิน':r.over_minutes,'Net นาที':r.net_minutes
+   'รหัส BA':r.employee_code,'ชื่อพนักงาน':r.display_name,'Supervisor':r.supervisor_name,'Region':r.region,
+   ...Object.fromEntries(Array.from({length:daysInMonth($('monthlyMonth').value)},(_,i)=>[String(i+1),r[`day_${i+1}`]||''])),
+   'WORK':r.WORK,'OFF':r.OFF,'SICK':r.SICK,'HOL':r.HOL,'INC':r.INC
  }));
  return rows.map(r=>({
    'วันที่':r.work_date,'รหัสพนักงาน':r.employee_code,'ชื่อพนักงาน':r.display_name,'Supervisor':r.supervisor_name,
@@ -473,6 +486,8 @@ function render(){
  $('scheduleMonth').classList.toggle('hidden',current!=='schedules');
  $('dailyDate').classList.toggle('hidden',current!=='daily');
  $('monthlyMonth').classList.toggle('hidden',current!=='monthly');
+ $('monthlySupervisor').classList.toggle('hidden',current!=='monthly');
+ $('monthlyRegion').classList.toggle('hidden',current!=='monthly');
  $('attendanceFrom').classList.toggle('hidden',current!=='attendance');
  $('attendanceTo').classList.toggle('hidden',current!=='attendance');
  $('recalcSummaryBtn').classList.toggle('hidden',!['daily','monthly'].includes(current));
@@ -495,6 +510,8 @@ function render(){
 
  if(current==='monthly'){
    if(!$('monthlyMonth').value)$('monthlyMonth').value=bangkokDateKey(new Date()).slice(0,7);
+   if($('monthlySupervisor').options.length===1)$('monthlySupervisor').innerHTML='<option value="">Supervisor ทั้งหมด</option>'+(DATA.supervisors||[]).filter(s=>s.active!==false).map(s=>`<option value="${s.id}">${esc(s.supervisor_name)}</option>`).join('');
+   if($('monthlyRegion').options.length===1)$('monthlyRegion').innerHTML='<option value="">Region ทั้งหมด</option>'+[...new Set((DATA.offices||[]).map(o=>o.region).filter(Boolean))].sort().map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
    return renderMonthlySummary();
  }
 
