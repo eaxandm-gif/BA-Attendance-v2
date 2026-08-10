@@ -46,7 +46,7 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
       <input id="search" placeholder="ค้นหา..." oninput="render()" style="max-width:300px">
       <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
       <input id="dailyDate" class="hidden" type="date" onchange="render()" style="max-width:180px">
-      <input id="monthlyMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
+      <input id="monthlyMonth" class="hidden" type="month" onchange="loadMonthlyMatrixAttendance()" style="max-width:180px">
       <select id="monthlySupervisor" class="hidden" onchange="render()" style="max-width:200px"><option value="">Supervisor ทั้งหมด</option></select>
       <select id="monthlyRegion" class="hidden" onchange="render()" style="max-width:200px"><option value="">Region ทั้งหมด</option></select>
       <input id="attendanceFrom" class="hidden" type="date" onchange="loadAttendanceHistory()" title="Attendance ตั้งแต่วันที่" style="max-width:180px">
@@ -82,7 +82,7 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
 <div id="modal" class="modal"><div class="sheet"><h3 id="modalTitle"></h3><div id="modalBody"></div><div class="actions"><button class="gray" onclick="closeModal()">ยกเลิก</button><button class="primary" id="saveBtn">บันทึก</button></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
-let KEY='',DATA={},current='employees',selectedScheduleCells=new Set(),scheduleEditMode=false,attendanceLoading=false;
+let KEY='',DATA={},current='employees',selectedScheduleCells=new Set(),scheduleEditMode=false,attendanceLoading=false,monthlyMatrixLoading=false;
 const tabs=[
  ['registrations','อนุมัติ BA ใหม่'],['employees','พนักงาน BA'],['supervisors','Supervisor'],['offices','สาขา'],['shifts','Shift'],
  ['schedules','ตารางงาน'],['attendance','Attendance'],['leaves','การลา'],
@@ -152,10 +152,25 @@ async function loadAttendanceHistory(){
    msg(`โหลด Attendance ย้อนหลังไม่สำเร็จ: ${e.message}`,true);
  }finally{attendanceLoading=false;render()}
 }
+async function loadMonthlyMatrixAttendance(){
+ if(current!=='monthly'||monthlyMatrixLoading)return;
+ const month=$('monthlyMonth').value;
+ if(!month)return;
+ monthlyMatrixLoading=true;render();
+ try{
+   const end=`${month}-${String(daysInMonth(month)).padStart(2,'0')}`;
+   const result=await api('list_attendance',{start_date:`${month}-01`,end_date:end,limit:10000});
+   const rows=result?.data?.attendance||result?.attendance||result?.data||result?.rows||[];
+   if(!Array.isArray(rows))throw new Error('รูปแบบข้อมูล Attendance ไม่ถูกต้อง');
+   DATA.attendance=rows;
+ }catch(e){msg(`โหลด Attendance สำหรับ Matrix ไม่สำเร็จ: ${e.message}`,true)}
+ finally{monthlyMatrixLoading=false;render()}
+}
 function buildTabs(){$('tabs').innerHTML=tabs.map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('')}
 function switchTab(id){
  current=id;buildTabs();render();
  if(id==='attendance')loadAttendanceHistory();
+ if(id==='monthly')loadMonthlyMatrixAttendance();
 }
 function findName(list,id,key='id',label='display_name'){const x=(list||[]).find(v=>v[key]===id);return x?x[label]||x.office_name||x.supervisor_name||x.shift_name:id||'-'}
 function filterRows(rows){const q=$('search').value.trim().toLowerCase();return !q?rows:rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q))}
@@ -295,7 +310,7 @@ function relevantDatesForEmployeeMonth(emp,month){
  (DATA.leaves||[]).filter(l=>l.employee_id===emp.id&&String(l.leave_date||'').startsWith(month)&&l.status==='APPROVED').forEach(l=>set.add(l.leave_date));
  return [...set].sort();
 }
-function matrixStatusForDate(emp,date){
+function matrixStatusForDate(emp,date,eventMap){
  const today=bangkokDateKey(new Date());
  if(date>=today)return '';
  const leave=(DATA.leaves||[]).find(l=>l.employee_id===emp.id&&l.leave_date===date&&l.status==='APPROVED');
@@ -313,12 +328,28 @@ function matrixStatusForDate(emp,date){
    if(['BUSINESS_LEAVE','VACATION'].includes(summary.status))return 'HOL';
    if(summary.status==='OFF')return 'OFF';
  }
+ const events=eventMap.get(`${emp.id}:${date}`)||[];
+ if(events.length){
+   const startTypes=new Set(['IN','DAY_IN','BRANCH_IN','WORK_IN','REFILL_IN','BREAK_IN']);
+   const endTypes=new Set(['OUT','DAY_OUT','BRANCH_OUT','WORK_OUT','REFILL_OUT','BREAK_OUT']);
+   const hasStart=events.some(e=>startTypes.has(e.event_type));
+   const hasEnd=events.some(e=>endTypes.has(e.event_type));
+   return hasStart&&hasEnd?'WORK':'INC';
+ }
  return 'OFF';
 }
 function buildMonthlyMatrix(month){
  const supervisor=$('monthlySupervisor').value;
  const region=$('monthlyRegion').value;
  const total=daysInMonth(month);
+ const eventMap=new Map();
+ for(const event of (DATA.attendance||[])){
+   const date=bangkokDateKey(event.occurred_at);
+   if(!date.startsWith(month))continue;
+   const key=`${event.employee_id}:${date}`;
+   if(!eventMap.has(key))eventMap.set(key,[]);
+   eventMap.get(key).push(event);
+ }
  return (DATA.employees||[]).filter(emp=>{
    if(emp.active===false&&!relevantDatesForEmployeeMonth(emp,month).length)return false;
    if(supervisor&&emp.supervisor_id!==supervisor)return false;
@@ -329,7 +360,7 @@ function buildMonthlyMatrix(month){
    const counts={WORK:0,OFF:0,SICK:0,HOL:0,INC:0};
    for(let day=1;day<=total;day++){
      const date=`${month}-${String(day).padStart(2,'0')}`;
-     const status=matrixStatusForDate(emp,date);
+     const status=matrixStatusForDate(emp,date,eventMap);
      row[`day_${day}`]=status;
      if(status)counts[status]++;
    }
@@ -434,7 +465,7 @@ function renderMonthlySummary(){
  const total=daysInMonth(month);
  const headers=['BA',...Array.from({length:total},(_,i)=>String(i+1)),'WORK','OFF','SICK','HOL','INC'];
  const body=table(headers,rows.map(r=>`<tr><td class="emp"><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>${Array.from({length:total},(_,i)=>`<td><span class="badge">${esc(r[`day_${i+1}`]||'-')}</span></td>`).join('')}<td>${r.WORK}</td><td>${r.OFF}</td><td>${r.SICK}</td><td>${r.HOL}</td><td>${r.INC}</td></tr>`));
- $('content').innerHTML=kpis+`<div class="muted" style="margin-bottom:8px">WORK = ทำงาน · OFF = หยุด · SICK = ลาป่วย · HOL = ลาอื่น · INC = ข้อมูลลงเวลาไม่ครบ</div>`+body;
+ $('content').innerHTML=(monthlyMatrixLoading?'<div class="status">กำลังโหลด Attendance ของเดือนที่เลือก...</div>':'')+kpis+`<div class="muted" style="margin-bottom:8px">WORK = ทำงาน · OFF = หยุด · SICK = ลาป่วย · HOL = ลาอื่น · INC = ข้อมูลลงเวลาไม่ครบ</div>`+body;
 }
 function csvEscape(v){
  const s=String(v??'');
