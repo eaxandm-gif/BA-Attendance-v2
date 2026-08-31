@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <!-- BA Attendance frontend v4.6.1 GPS_RECOVERY_FIX -->
+  <!-- BA Attendance frontend v4.6.2 GPS_RECOVERY_FIX -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BA Attendance</title>
@@ -28,7 +28,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.6.1 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.6.2 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -103,13 +103,17 @@ function showModalError(message){openModal(`<div class="title">เกิดข�
 
 function showLocationRetryError(message,type){
   const safeType=String(type||'');
-  openModal(`<div class="title">ไม่สามารถอ่านตำแหน่งได้</div>
-    <div class="item error">${esc(message)}</div>
-    <div class="grid" style="margin-top:12px">
+  openModal(`<div class="title">ตำแหน่งยังไม่แม่นพอ</div>
+    <div class="item" style="background:#fff7fb;border:1px solid #f3c7dc">
+      <div style="font-size:17px;line-height:1.55">${esc(message)}</div>
+    </div>
+    <div class="muted" style="margin:12px 2px 14px;line-height:1.5">
+      แนะนำ: เปิด Wi‑Fi, เปิด Precise Location และอยู่ใกล้หน้าร้านหรือพื้นที่เปิด แล้วลองใหม่
+    </div>
+    <div class="grid" style="gap:10px">
       <button class="primary" id="retryLocationBtn">ลองใหม่</button>
       <button id="openSafariLocationBtn">เปิดใน Safari</button>
-    </div>
-    <button class="full" style="margin-top:10px" onclick="closeModal()">ปิด</button>`);
+    </div>`);
   const retry=$('retryLocationBtn');
   if(retry)retry.onclick=()=>{
     closeModal();
@@ -144,7 +148,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.6.1';
+      $('version').textContent='v4.6.2';
       await renderExternalEmployeeHome();
       return;
     }
@@ -161,7 +165,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.6.1';
+    $('version').textContent='v4.6.2';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -258,7 +262,7 @@ function geolocationErrorMessage(err){
   if(err.code===1)return 'iPhone ปฏิเสธสิทธิ์ Location กรุณาเปิด Settings → Privacy & Security → Location Services → LINE → While Using the App และเปิด Precise Location';
   if(err.code===2)return 'โทรศัพท์ยังหาตำแหน่งไม่ได้ กรุณาเปิด Wi‑Fi และ 4G/5G แล้วลองใหม่';
   if(err.code===3)return 'รับตำแหน่งนานเกินไป กรุณากดลองใหม่ หากยังไม่ได้ให้เปิดใน Safari';
-  if(err.code===4)return `${err.message||'ความแม่นยำ GPS ต่ำเกินไป'} กรุณารอสัญญาณ GPS แล้วลองใหม่`;
+  if(err.code===4)return `${err.message||'GPS ยังคลาดเคลื่อนมาก'} กรุณาเปิด Precise Location และ Wi‑Fi แล้วลองใหม่`;
   if(err.code===5)return err.message||'ระบบไม่สามารถรับตำแหน่งจาก LINE ได้ กรุณากดลองใหม่ หรือเปิดใน Safari';
   return err.message||'ไม่สามารถอ่านตำแหน่งได้';
 }
@@ -444,6 +448,27 @@ async function requestBestLocation(){
       }
 
       if(validLocationPosition(fallback)){
+        try{
+          const finalTry=await getPosition({
+            enableHighAccuracy:true,
+            maximumAge:0,
+            timeout:12000
+          });
+          if(validLocationPosition(finalTry)&&
+             positionAccuracy(finalTry)<=LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS){
+            return finalTry;
+          }
+          if(validLocationPosition(finalTry)){
+            throw {
+              code:4,
+              accuracy:positionAccuracy(finalTry),
+              message:`GPS ยังคลาดเคลื่อน ${Math.round(positionAccuracy(finalTry))} เมตร`
+            };
+          }
+        }catch(finalError){
+          if(finalError?.code===1)throw finalError;
+        }
+
         throw {
           code:4,
           accuracy:positionAccuracy(fallback),
@@ -994,7 +1019,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.6.1';
+  $('version').textContent='v4.6.2';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -1070,7 +1095,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.6.1';
+  $('version').textContent='v4.6.2';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
