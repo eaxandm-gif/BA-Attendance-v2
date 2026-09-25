@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <!-- BA Attendance frontend v4.6.2 GPS_RECOVERY_FIX -->
+  <!-- BA Attendance frontend v4.6.3 ATOMIC_ATTENDANCE_ORDER -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BA Attendance</title>
@@ -28,7 +28,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.6.2 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.6.3 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -88,9 +88,9 @@ async function appRequest(action,payload={}){
       if(String(message).includes('หมดอายุ')){
         throw new Error('ลิงก์ลงเวลาหมดอายุ กรุณากลับไปเปิด BA Attendance ใน LINE แล้วกดเปิด Safari ใหม่');
       }
-      throw new Error(message);
+      const error=new Error(message); error.status=r.status; throw error;
     }
-    return data;
+    return Object.prototype.hasOwnProperty.call(data,'data')?data.data:data;
   }finally{clearTimeout(timer)}
 }
 const labels={IN:'เข้างาน',OUT:'ออกงาน',BREAK_OUT:'ออกพัก',BREAK_IN:'กลับจากพัก',DAY_IN:'เริ่มวัน',DAY_OUT:'จบวัน',BRANCH_IN:'เข้าสาขา',BRANCH_OUT:'ออกสาขา',WORK_IN:'เข้างาน',WORK_OUT:'ออกงาน',REFILL_IN:'เข้าเติมของ',REFILL_OUT:'ออกจากเติมของ'};
@@ -148,7 +148,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.6.2';
+      $('version').textContent='v4.6.3';
       await renderExternalEmployeeHome();
       return;
     }
@@ -165,7 +165,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.6.2';
+    $('version').textContent='v4.6.3';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -188,6 +188,7 @@ async function renderExternalEmployeeHome(){
       <div class="status">สถานะ: ${esc(labels[r.state.label]||r.state.label)}
 สาขาปัจจุบัน: ${esc(r.state.office_name||'-')}
 Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}</div>
+      ${r.attendance_issue?`<div class="item error">${esc(r.attendance_issue)}</div>`:''}
       <div class="grid" id="actionGrid"></div>
     </div>
     <div class="card">
@@ -220,6 +221,7 @@ async function renderEmployeeHome(){
         </div>
         <div><b>พักรวม:</b> ${hm(r.summary?.break_minutes||0)} · <b>เกิน:</b> ${hm(r.summary?.over_minutes||0)} · <b>ขาด:</b> ${hm(r.summary?.short_minutes||0)}</div>
       </div>
+      ${r.attendance_issue?`<div class="item error">${esc(r.attendance_issue)}</div>`:''}
       <div class="grid" id="actionGrid"></div>
     </div>
     <div class="card">
@@ -502,33 +504,64 @@ async function testLocation(){
   }catch(e){if(e?.code===1)showLocationPermissionFallback();else showModalError(geolocationErrorMessage(e))}
 }
 let attendanceSubmitting=false;
+let pendingAttendance=null;
+function attendancePendingKey(){
+  return 'ba-attendance-pending:'+String(session?.profile?.line_user_id||'')+':'+(externalToken?'external':'line');
+}
+function getPendingAttendance(){
+  try{return JSON.parse(sessionStorage.getItem(attendancePendingKey())||'null')||pendingAttendance}catch(_){return pendingAttendance}
+}
+function savePendingAttendance(value){
+  pendingAttendance=value;
+  try{if(value)sessionStorage.setItem(attendancePendingKey(),JSON.stringify(value));else sessionStorage.removeItem(attendancePendingKey())}catch(_){}
+}
+async function refreshAttendanceHome(){
+  return externalToken?renderExternalEmployeeHome():renderEmployeeHome();
+}
+function showAttendanceRetry(message,type){
+  openModal(`<div class="title">ยังยืนยันการบันทึกไม่ได้</div><div class="item">${esc(message)}</div><button class="primary full" id="retryAttendanceBtn">ตรวจสอบและลองอีกครั้ง</button>`);
+  $('retryAttendanceBtn').onclick=()=>submitAttendance(type);
+}
 async function submitAttendance(type){
   if(attendanceSubmitting)return;
+  const pending=getPendingAttendance();
+  if(pending&&pending.type!==type){
+    showAttendanceRetry('กรุณาตรวจสอบรายการก่อนหน้าก่อนลงเวลารายการถัดไป',pending.type);
+    return;
+  }
   attendanceSubmitting=true;
+  let committed=false;
   document.querySelectorAll('#actionGrid button').forEach(b=>b.disabled=true);
   showLoadingModal('กำลังตรวจตำแหน่ง');
   try{
     const p=await requestBestLocation();
+    const intent=pending||{type,request_key:crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`};
+    savePendingAttendance(intent);
     await appRequest('submit_attendance',{
-      type,
-      latitude:p.coords.latitude,
-      longitude:p.coords.longitude,
-      accuracy:p.coords.accuracy,
-      request_key:(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`)
+      ...intent,latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy
     });
+    committed=true;
+    savePendingAttendance(null);
     closeModal();
-    await renderEmployeeHome();
+    await refreshAttendanceHome();
   }catch(e){
-    if(e?.code===1){
+    if(committed){
+      openModal('<div class="title">บันทึกเวลาแล้ว</div><div class="item">โหลดหน้าล่าสุดไม่สำเร็จ กรุณาโหลดใหม่</div><button class="primary full" id="refreshAttendanceBtn">โหลดใหม่</button>');
+      $('refreshAttendanceBtn').onclick=()=>location.reload();
+    }else if(e?.code===1){
       showLocationPermissionFallback();
     }else if(typeof e?.code==='number'){
       showLocationRetryError(geolocationErrorMessage(e),type);
+    }else if(e?.status>=400&&e.status<500){
+      savePendingAttendance(null);
+      try{await refreshAttendanceHome()}catch(_){}
+      showModalError(e.message);
     }else{
-      showLocationRetryError(e?.message||'ไม่สามารถบันทึกเวลาได้',type);
+      showAttendanceRetry(e?.message||'กรุณาตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง',type);
     }
   }finally{
     attendanceSubmitting=false;
-    document.querySelectorAll('#actionGrid button').forEach(b=>b.disabled=false);
+    if(!committed)document.querySelectorAll('#actionGrid button').forEach(b=>b.disabled=false);
   }
 }
 
@@ -1019,7 +1052,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.6.2';
+  $('version').textContent='v4.6.3';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -1095,7 +1128,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.6.2';
+  $('version').textContent='v4.6.3';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}

@@ -42,7 +42,9 @@
       }
 
       if (!response.ok || result.success === false) {
-        throw new Error(result.message || `เกิดข้อผิดพลาด HTTP ${response.status}`);
+        const error=new Error(result.message || `เกิดข้อผิดพลาด HTTP ${response.status}`);
+        error.status=response.status;
+        throw error;
       }
 
       return Object.prototype.hasOwnProperty.call(result, 'data')
