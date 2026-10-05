@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <!-- BA Attendance frontend v4.6.4 ATOMIC_ATTENDANCE_ORDER -->
+  <!-- BA Attendance frontend v4.6.5 ATOMIC_ATTENDANCE_ORDER -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BA Attendance</title>
@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js?v=2.8.0"></script>
 <script src="api.js?v=2.8.0"></script>
+<script src="attendance-review.js?v=4.6.5"></script>
 <style>
 :root{--pink:#db2777;--soft:#fff1f7;--card:#fff;--text:#4a2438;--muted:#8b5f74;--ok:#166534;--warn:#9a3412;--bad:#991b1b}
 *{box-sizing:border-box}body{margin:0;font-family:Arial,"Noto Sans Thai",sans-serif;background:linear-gradient(180deg,#ffe4f0,#fff7fb);color:var(--text)}
@@ -28,7 +29,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.6.4 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.6.5 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -150,7 +151,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.6.4';
+      $('version').textContent='v4.6.5';
       await renderExternalEmployeeHome();
       return;
     }
@@ -167,7 +168,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.6.4';
+    $('version').textContent='v4.6.5';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -602,7 +603,7 @@ async function showPendingGpsRequests(){
  showLoadingModal('กำลังโหลดคำขอ GPS');
  try{const r=await BA_API.request('pending_gps_requests');openModal(`<div class="title">คำขอ GPS รออนุมัติ</div>${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>${esc(labels[x.event_type])} · ${esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}</div><div>${esc(x.offices?.office_name)} · ${esc(x.reason)}</div><div>GPS คลาดเคลื่อน: ${x.accuracy_meters==null?'ไม่มีพิกัด':esc(x.accuracy_meters)+' เมตร'}</div><button onclick="reviewGpsRequest('${x.id}','APPROVED')">อนุมัติ</button><button onclick="reviewGpsRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div>`).join('')||'<div class="item">ไม่มีคำขอ</div>'}`)}catch(e){showModalError(e.message)}
 }
-async function reviewGpsRequest(request_id,status){const reviewer_note=prompt('ยืนยันตรวจสอบการอยู่ที่สาขาแล้ว ระบุเหตุผลการอนุมัติ/ปฏิเสธ');if(!reviewer_note?.trim())return;try{await BA_API.request('review_gps_request',{request_id,status,reviewer_note});await showPendingGpsRequests()}catch(e){alert(e.message)}}
+async function reviewGpsRequest(id,status){return AttendanceReview.open({kind:'gps',id,decision:status,request:(a,p)=>BA_API.request(a,p),mount:openModal,onDone:showPendingGpsRequests});}
 
 async function showOfficeLocationRequest(){
   showLoadingModal('กำลังโหลดคำขอออฟฟิศ');
@@ -743,14 +744,14 @@ async function showShiftRequest(){
         <b>ขอลงเวลาย้อนหลัง</b>
         <div class="muted" style="margin:6px 0 10px">ใช้เมื่อ BA ลืมลงเวลาและออกจากสาขาแล้ว ต้องรอ Supervisor อนุมัติ</div>
         <div class="field"><label>วันที่</label><input id="arDate" type="date" max="${thaiDate()}"></div>
-        <div class="field"><label>ลืมลงเวลา</label><select id="arSide"><option value="IN">เข้า</option><option value="OUT">ออก</option></select></div>
-        <div class="field"><label>สาขา</label><select id="arOffice">${r.offices.map(o=>`<option value="${o.id}">${esc(o.office_code||'')} · ${esc(o.office_name)}</option>`).join('')}</select></div>
+        <div class="field"><label>ลืมลงเวลา</label><select id="arSide" onchange="document.getElementById('arTimeEndField').hidden=this.value!=='BREAK_BOTH'"><option value="IN">เข้างาน</option><option value="OUT">ออกงาน</option><option value="BREAK_OUT">ออกพัก</option><option value="BREAK_IN">กลับจากพัก</option><option value="BREAK_BOTH">ออกพักและกลับจากพัก</option></select></div>
+        <div class="field"><label>เวลาจริง (เวลาไทย / เวลาออกพักเมื่อขอทั้งคู่)</label><input id="arTime" type="time"></div><div class="field" id="arTimeEndField" hidden><label>เวลากลับจากพัก</label><input id="arTimeEnd" type="time"></div><div class="field"><label>สาขา</label><select id="arOffice">${r.offices.map(o=>`<option value="${o.id}">${esc(o.office_code||'')} · ${esc(o.office_name)}</option>`).join('')}</select></div>
         <div class="field"><label>เหตุผล</label><textarea id="arReason" placeholder="เช่น ลืมกดออกงานและกลับถึงบ้านแล้ว"></textarea></div>
-        <button class="primary full" onclick="submitAttendanceCorrectionRequest()">ส่งคำขอลงเวลา</button>
+        <button id="arSubmit" class="primary full" onclick="submitAttendanceCorrectionRequest()">ส่งคำขอลงเวลา</button>
       </div>
       <div class="title" style="margin-top:16px">สถานะคำขอลงเวลา</div>
       <div class="muted" style="margin-bottom:8px">แสดงเฉพาะคำขอในช่วง 3 วันที่ผ่านมา คำขอที่รอเกิน 3 วันจะถูกปฏิเสธอัตโนมัติ</div>
-      <div class="list">${(r.attendance_requests||[]).map(x=>`<div class="item"><b>${esc(x.request_date)} · ลืมลง${x.request_side==='IN'?'เข้า':'ออก'}</b><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลาในช่วง 3 วันที่ผ่านมา</div>'}</div>
+      <div class="list">${(r.attendance_requests||[]).map(x=>`<div class="item"><b>${esc(x.request_date)} · ลืมลง${esc(AttendanceReview.names[x.request_side]||x.request_side)}</b><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลาในช่วง 3 วันที่ผ่านมา</div>'}</div>
 
       <div class="title" style="margin-top:16px">คำขอเปลี่ยน Shift ที่กำลังดำเนินการ</div>
       <div class="list">${r.requests.filter(x=>x.request_type==='SHIFT_CHANGE').map(x=>`<div class="item"><b>${esc(x.request_date)}</b><div>ขอเปลี่ยน Shift เป็น ${esc(x.requested_shift_id||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason)}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอเปลี่ยน Shift ที่กำลังดำเนินการ</div>'}</div>`);
@@ -783,7 +784,22 @@ async function submitShiftRequest(){
     showShiftRequest();
   }catch(e){alert(e.message)}
 }
-async function submitAttendanceCorrectionRequest(){try{const requestDate=$('arDate').value,requestSide=$('arSide').value,officeId=$('arOffice').value,reason=$('arReason').value.trim();if(!requestDate)return alert('กรุณาระบุวันที่');if(!officeId)return alert('กรุณาเลือกสาขา');if(!reason)return alert('กรุณาระบุเหตุผล');await BA_API.request('submit_attendance_correction_request',{request_date:requestDate,request_side:requestSide,office_id:officeId,reason});alert('ส่งคำขอลงเวลาแล้ว รอ Supervisor อนุมัติ');showShiftRequest()}catch(e){alert(e.message)}}
+let attendanceCorrectionRetry=null,attendanceCorrectionBusy=false;
+async function submitAttendanceCorrectionRequest(){
+ if(attendanceCorrectionBusy)return;
+ try{
+  const request_date=$('arDate').value,request_side=$('arSide').value,office_id=$('arOffice').value,reason=$('arReason').value.trim(),time=$('arTime').value,end=$('arTimeEnd').value;
+  if(!request_date||!office_id||!reason||!time)throw Error('กรุณาระบุวันที่ เวลาจริง สาขา และเหตุผลให้ครบ');
+  if(request_side==='BREAK_BOTH'&&(!end||end<=time))throw Error('เวลากลับจากพักต้องหลังเวลาออกพัก');
+  const event=(event_type,t)=>({event_type,occurred_at:`${request_date}T${t}:00+07:00`,office_id});
+  const events=request_side==='BREAK_BOTH'?[event('BREAK_OUT',time),event('BREAK_IN',end)]:[event(request_side,time)];
+  const payload={request_date,request_side,events,reason},signature=JSON.stringify(payload);
+  if(attendanceCorrectionRetry?.signature!==signature)attendanceCorrectionRetry={signature,key:crypto.randomUUID()};
+  attendanceCorrectionBusy=true;$('arSubmit').disabled=true;
+  await BA_API.request('submit_attendance_correction_request',{...payload,request_key:attendanceCorrectionRetry.key});
+  attendanceCorrectionRetry=null;alert('ส่งคำขอแล้ว รอผู้ดูแลตรวจสอบและอนุมัติ');await showShiftRequest();
+ }catch(e){alert(e.message)}finally{attendanceCorrectionBusy=false;if($('arSubmit'))$('arSubmit').disabled=false;}
+}
 function showLeaveForm(){openModal(`<div class="title">ยื่นคำขอลา</div><div class="field"><label>วันที่</label><input id="lvDate" type="date"></div><div class="field"><label>ประเภท</label><select id="lvType"><option value="SICK_LEAVE">ลาป่วย</option><option value="BUSINESS_LEAVE">ลากิจ</option><option value="VACATION">ลาพักร้อน</option></select></div><div class="field"><label>เหตุผล</label><textarea id="lvReason"></textarea></div><button class="primary full" onclick="submitLeave()">ส่งคำขอ</button>`)}
 async function submitLeave(){try{await BA_API.request('submit_leave',{leave_date:$('lvDate').value,leave_type:$('lvType').value,reason:$('lvReason').value});closeModal();alert('ส่งคำขอแล้ว')}catch(e){alert(e.message)}}
 async function renderSupervisorHome(){
@@ -985,7 +1001,7 @@ async function showApprovalInbox(){
       <div class="title" style="margin-top:14px">คำขอลงเวลาย้อนหลัง</div>
       <div class="list">${(r.attendance||[]).map(x=>`<div class="item">
         <b>${esc(x.employees?.employee_code||'')} · ${esc(x.employees?.display_name||'')}</b>
-        <div>${esc(x.request_date)} · ลืมลง${x.request_side==='IN'?'เข้า':'ออก'}</div>
+        <div>${esc(x.request_date)} · ลืมลง${esc(AttendanceReview.names[x.request_side]||x.request_side)}</div>
         <div>สาขา: ${esc(x.offices?.office_name||'-')}</div>
         <div>เหตุผล: ${esc(x.reason||'-')}</div>
         <div class="grid">
@@ -1034,8 +1050,8 @@ async function reviewOfficeLocationFromInbox(id,decision){
 }
 
 
-async function showPendingAttendanceRequests(){showLoadingModal('กำลังโหลดคำขอลงเวลา');try{const r=await BA_API.request('pending_attendance_correction_requests');openModal(`<div class="title">คำขอลงเวลารออนุมัติ</div><button class="primary full" onclick="showPendingGpsRequests()">คำขอ GPS / ออกพัก / กลับจากพัก</button><div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>วันที่: ${esc(x.request_date)}</div><div>ลืมลงเวลา: ${x.request_side==='IN'?'เข้า':'ออก'}</div><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div class="muted">อนุมัติแล้วจะใช้เวลา${x.request_side==='IN'?'เริ่ม':'เลิก'}กะ และแทนที่ Event ประเภทเดียวกัน</div><div class="grid"><button class="green" onclick="reviewAttendanceCorrectionRequest('${x.id}','APPROVED')">อนุมัติ</button><button class="red" onclick="reviewAttendanceCorrectionRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลารออนุมัติ</div>'}</div>`)}catch(e){showModalError(e.message)}}
-async function reviewAttendanceCorrectionRequest(id,status){const note=prompt('เหตุผล/หมายเหตุ Supervisor');if(!note)return;try{await BA_API.request('review_attendance_correction_request',{request_id:id,status,reviewer_note:note});alert(status==='APPROVED'?'อนุมัติแล้ว ระบบอัปเดต Attendance และสรุปรายวัน/รายเดือนแล้ว':'ปฏิเสธคำขอแล้ว');await renderSupervisorHome();showPendingAttendanceRequests()}catch(e){alert(e.message)}}
+async function showPendingAttendanceRequests(){showLoadingModal('กำลังโหลดคำขอลงเวลา');try{const r=await BA_API.request('pending_attendance_correction_requests');openModal(`<div class="title">คำขอลงเวลารออนุมัติ</div><button class="primary full" onclick="showPendingGpsRequests()">คำขอ GPS / ออกพัก / กลับจากพัก</button><div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>วันที่: ${esc(x.request_date)}</div><div>ลืมลงเวลา: ${esc(AttendanceReview.names[x.request_side]||x.request_side)}</div><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div class="muted">ตรวจสอบประวัติ และระบุประเภทกับเวลาจริงก่อนอนุมัติ</div><div class="grid"><button class="green" onclick="reviewAttendanceCorrectionRequest('${x.id}','APPROVED')">อนุมัติ</button><button class="red" onclick="reviewAttendanceCorrectionRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลารออนุมัติ</div>'}</div>`)}catch(e){showModalError(e.message)}}
+async function reviewAttendanceCorrectionRequest(id,status){return AttendanceReview.open({kind:'correction',id,decision:status,request:(a,p)=>BA_API.request(a,p),mount:openModal,onDone:showPendingAttendanceRequests});}
 async function showPendingShiftRequests(){
   showLoadingModal('กำลังโหลดคำขอ');
   try{
@@ -1091,7 +1107,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.6.4';
+  $('version').textContent='v4.6.5';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -1167,7 +1183,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.6.4';
+  $('version').textContent='v4.6.5';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}

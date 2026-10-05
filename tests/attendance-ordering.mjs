@@ -33,6 +33,7 @@ await db.query(fs.readFileSync(new URL('supabase/migrations/202609250002_atomic_
 await db.query(fs.readFileSync(new URL('supabase/migrations/202609250003_admin_attendance_override.sql',root),'utf8'));
 await db.query('create table offices(id uuid primary key,active boolean default true)');
 for(const f of ['202610050001_admin_correction_review.sql','202610050002_gps_attendance_requests.sql','202610050003_legacy_break_request_guard.sql'])await db.query(fs.readFileSync(new URL('supabase/migrations/'+f,root),'utf8'));
+await db.query('alter table employees add column employee_code text, add column display_name text; alter table offices add column office_name text');
 const employee=async(mode='FIXED_BRANCH')=>{const id=randomUUID();await db.query('insert into employees values($1,$2,true,$3)',[id,mode,id]);return id;};
 const office=randomUUID();await db.query('insert into offices(id) values($1)',[office]);
 async function submit(id,type,key=randomUUID(),client=db,extra={}){const q=await client.query('select (public.insert_attendance_event_guarded($1,$2,clock_timestamp(),$3,13,100,20,10,$4,$5,$6)).*',[id,type,extra.office||office,extra.source||'LIFF',extra.actor||id,key]);return q.rows[0];}
@@ -104,5 +105,67 @@ await check('GPS review enforces supervisor ownership and functions have no publ
 await check('admin can approve existing correction requests without impersonating a supervisor',async()=>{const id=await employee();const req=(await db.query("insert into attendance_correction_requests(employee_id,request_date,request_side,office_id,reason) values($1,current_date,'IN',$2,'test') returning id",[id,office])).rows[0];const q=(await db.query("select ba_admin_review_attendance_correction($1,'APPROVED','Verified','09:00','18:00') r",[req.id])).rows[0].r;assert.equal(q.request.status,'APPROVED');assert.equal(q.applied_event.source,'ADMIN_APPROVED_REQUEST');assert.equal((await db.query("select actor_role from audit_logs where entity_id=$1 and action='REVIEW'",[req.id])).rows[0].actor_role,'ADMIN');});
 await check('concurrent GPS approvals create exactly one audited event',async()=>{const id=await employee(),req=await gps(id,'IN'),cs=Array.from({length:8},()=>pg.getPgClient());try{await Promise.all(cs.map(c=>c.connect()));const results=await Promise.all(cs.map(c=>reviewGps(req.id,'APPROVED',c)));assert.equal(new Set(results.map(x=>x.request.applied_event_id)).size,1);assert.equal((await db.query('select count(*)::int n from attendance_events where employee_id=$1',[id])).rows[0].n,1);}finally{await Promise.all(cs.map(c=>c.end()));}});
 await check('legacy break requests cannot overwrite shift start/end through admin approval',async()=>{const id=await employee();const req=(await db.query("insert into attendance_correction_requests(employee_id,request_date,request_side,office_id,reason) values($1,current_date,'IN',$2,'ลืมกดกลับจากพัก') returning id",[id,office])).rows[0];await assert.rejects(()=>db.query("select ba_admin_review_attendance_correction($1,'APPROVED','Verified','09:00','18:00')",[req.id]),/ประเภทเป็นเข้า/);assert.equal((await db.query('select count(*)::int n from attendance_events where employee_id=$1',[id])).rows[0].n,0);assert.equal((await db.query('select status from attendance_correction_requests where id=$1',[req.id])).rows[0].status,'PENDING');});
+
+await db.query("create type user_role as enum('EMPLOYEE','SUPERVISOR','ADMIN');alter table audit_logs alter column actor_role type user_role using actor_role::user_role");
+await db.query(fs.readFileSync(new URL('supabase/migrations/202610050004_editable_attendance_requests.sql',root),'utf8'));
+const day='2026-09-24';
+const proposed=(type,time,replace=null)=>({event_type:type,occurred_at:`${day}T${time}:00+07:00`,office_id:office,replace_event_id:replace});
+async function requestV2(id,side,events,key=randomUUID()){return (await db.query('select ba_submit_attendance_request_v2($1::uuid,$1::text,$2,$3,$4,$5,$6) r',[id,day,side,JSON.stringify(events),'Forgot break',key])).rows[0].r;}
+async function contextV2(id,kind='correction',supervisor=null){return (await db.query('select ba_attendance_review_context_v2($1,$2,$3,$4,$5) r',[kind,id,supervisor,supervisor||'ADMIN_WEB',!supervisor])).rows[0].r;}
+async function reviewV2(id,events,version,client=db,supervisor=null,kind='correction'){return (await client.query("select ba_review_attendance_request_v2($1,$2,'APPROVED','Verified actual time',$3,$4,$5,$6,$7) r",[kind,id,JSON.stringify(events),version,supervisor,supervisor||'ADMIN_WEB',!supervisor])).rows[0].r;}
+async function startDay(id,type='IN'){await db.query("insert into attendance_events(employee_id,event_type,occurred_at,office_id,source)values($1,$2,'2026-09-24 09:00+07',$3,'LIFF')",[id,type,office]);}
+await check('employee can request a single break or both with original times and idempotency',async()=>{
+ const id=await employee(),pair=[proposed('BREAK_OUT','12:00'),proposed('BREAK_IN','13:00')],key=randomUUID();
+ const r=await requestV2(id,'BREAK_BOTH',pair,key);assert.deepEqual(r.proposed_events,pair);assert.equal((await requestV2(id,'BREAK_BOTH',pair,key)).id,r.id);
+ await assert.rejects(()=>requestV2(id,'BREAK_IN',[pair[1]],key),/IDEMPOTENCY_CONFLICT/);
+ await requestV2(id,'BREAK_OUT',[pair[0]]);await requestV2(id,'BREAK_IN',[pair[1]]);
+ await assert.rejects(()=>requestV2(id,'BREAK_BOTH',pair.toReversed()),/ออกพักก่อน/);
+ await assert.rejects(()=>requestV2(id,'IN',[pair[0]]),/ประเภทคำขอ/);
+ assert.equal((await db.query('select count(*)::int n from attendance_events where employee_id=$1',[id])).rows[0].n,0);
+});
+await check('admin repairs a mistyped legacy request into both break events without replacing IN',async()=>{
+ const f=await correctionFixture('IN','FIXED_BRANCH');await startDay(f.id);const ctx=await contextV2(f.request),pair=[proposed('BREAK_OUT','12:00'),proposed('BREAK_IN','13:00')];
+ const result=await reviewV2(f.request,pair,ctx.history_version);assert.equal(result.request.request_side,'IN');assert.equal(result.request.reason,'test');assert.deepEqual(result.request.reviewed_events,pair);assert.equal(result.request.applied_event_ids.length,2);
+ assert.deepEqual((await db.query('select event_type from attendance_events where employee_id=$1 and deleted_at is null order by occurred_at',[f.id])).rows.map(x=>x.event_type),['IN','BREAK_OUT','BREAK_IN']);
+ assert.equal((await reviewV2(f.request,pair,ctx.history_version)).replayed,true);
+ await assert.rejects(()=>reviewV2(f.request,[pair[0]],ctx.history_version),/ดำเนินการแล้ว/);
+});
+await check('supervisor can approve own team only and explicit replacement retains audit',async()=>{
+ const f=await correctionFixture('BREAK_OUT','FIXED_BRANCH');await startDay(f.id);await db.query("insert into attendance_events(employee_id,event_type,occurred_at,office_id,source)values($1,'BREAK_OUT','2026-09-24 12:00+07',$2,'LIFF')",[f.id,office]);
+ await assert.rejects(()=>contextV2(f.request,'correction',randomUUID()),/ไม่มีสิทธิ์/);
+ const ctx=await contextV2(f.request,'correction',f.supervisor),target=ctx.events[1].id;
+ await reviewV2(f.request,[proposed('BREAK_OUT','12:15',target)],ctx.history_version,db,f.supervisor);
+ assert.ok((await db.query('select deleted_at from attendance_events where id=$1',[target])).rows[0].deleted_at);
+ assert.equal((await db.query("select count(*)::int n from audit_logs where entity_id=$1 and action='OVERRIDE_DELETE'",[target])).rows[0].n,1);
+});
+await check('stale review, wrong order and duplicate break leave request and attendance untouched',async()=>{
+ const id=await employee();await startDay(id);const pair=[proposed('BREAK_OUT','12:00'),proposed('BREAK_IN','13:00')],r=await requestV2(id,'BREAK_BOTH',pair),ctx=await contextV2(r.id);
+ await assert.rejects(()=>reviewV2(r.id,[pair[1]],ctx.history_version),/ลำดับเวลา/);
+ await assert.rejects(()=>reviewV2(r.id,pair,'stale'),/ประวัติเปลี่ยน/);
+ await assert.rejects(()=>reviewV2(r.id,[proposed('BREAK_OUT','08:00')],ctx.history_version),/ลำดับเวลา/);
+ assert.equal((await contextV2(r.id)).request.status,'PENDING');assert.equal((await contextV2(r.id)).events.length,1);
+});
+await check('concurrent edited approvals create a single pair',async()=>{
+ const id=await employee();await startDay(id);const pair=[proposed('BREAK_OUT','12:00'),proposed('BREAK_IN','13:00')],r=await requestV2(id,'BREAK_BOTH',pair),ctx=await contextV2(r.id),cs=Array.from({length:6},()=>pg.getPgClient());
+ try{await Promise.all(cs.map(c=>c.connect()));const results=await Promise.all(cs.map(c=>reviewV2(r.id,pair,ctx.history_version,c)));assert.equal(new Set(results.map(x=>x.request.applied_event_ids.join(','))).size,1);assert.equal((await contextV2(r.id)).events.length,3);}finally{await Promise.all(cs.map(c=>c.end()));}
+});
+await check('editable review preserves STOCK_REFILL and MULTI_BRANCH break rules',async()=>{
+ for(const mode of ['STOCK_REFILL','MULTI_BRANCH']){const id=await employee(mode);await startDay(id,mode==='STOCK_REFILL'?'WORK_IN':'DAY_IN');if(mode==='MULTI_BRANCH')await db.query("insert into attendance_events(employee_id,event_type,occurred_at,office_id,source)values($1,'BRANCH_IN','2026-09-24 10:00+07',$2,'LIFF')",[id,office]);const pair=[proposed('BREAK_OUT','12:00'),proposed('BREAK_IN','13:00')],r=await requestV2(id,'BREAK_BOTH',pair),ctx=await contextV2(r.id);await reviewV2(r.id,pair,ctx.history_version);assert.equal((await contextV2(r.id)).events.at(-1).event_type,'BREAK_IN');}
+});
+await check('new RPCs are service-only and invalid dates/replacement targets are rejected',async()=>{
+ for(const role of ['anon','authenticated'])for(const fn of ['ba_submit_attendance_request_v2(uuid,text,date,text,jsonb,text,text)','ba_attendance_review_context_v2(text,uuid,uuid,text,boolean)','ba_review_attendance_request_v2(text,uuid,text,text,jsonb,text,uuid,text,boolean)'])assert.equal((await db.query("select has_function_privilege($1,$2,'execute') ok",[role,fn])).rows[0].ok,false);
+ const id=await employee();await assert.rejects(()=>requestV2(id,'BREAK_OUT',[{...proposed('BREAK_OUT','12:00'),occurred_at:'2099-01-01T12:00:00+07:00'}]),/เวลาต้อง/);await assert.rejects(()=>requestV2(id,'BREAK_OUT',[proposed('BREAK_OUT','12:00',randomUUID())]),/รายการที่เลือกแก้/);
+});
+
+await check('new approval rolls back all events and status if auditing fails',async()=>{
+ const id=await employee();await startDay(id);const pair=[proposed('BREAK_OUT','12:00'),proposed('BREAK_IN','13:00')],r=await requestV2(id,'BREAK_BOTH',pair),ctx=await contextV2(r.id);
+ await db.query("create function fail_review_audit() returns trigger language plpgsql as $$begin if new.action='REVIEW' then raise exception 'TEST_AUDIT_FAILURE';end if;return new;end$$;create trigger fail_review_audit before insert on audit_logs for each row execute function fail_review_audit()");
+ try{await assert.rejects(()=>reviewV2(r.id,pair,ctx.history_version),/TEST_AUDIT_FAILURE/);assert.equal((await contextV2(r.id)).request.status,'PENDING');assert.equal((await contextV2(r.id)).events.length,1);}finally{await db.query('drop trigger fail_review_audit on audit_logs;drop function fail_review_audit()');}
+});
+await check('GPS editable review preserves receipt and original type while recording reviewed events',async()=>{
+ const id=await employee(),r=await gps(id,'IN'),ctx=await contextV2(r.id,'gps');
+ const events=[{event_type:'IN',occurred_at:r.requested_at.toISOString(),office_id:office,replace_event_id:null}];
+ const result=await reviewV2(r.id,events,ctx.history_version,db,null,'gps');assert.equal(result.request.event_type,'IN');assert.equal(+new Date(result.request.requested_at),+r.requested_at);assert.deepEqual(result.request.reviewed_events,events);assert.equal(result.request.applied_event_ids.length,1);
+});
 console.log(`${passed} test groups passed`);
 }finally{if(db)await db.end();await pg.stop();}

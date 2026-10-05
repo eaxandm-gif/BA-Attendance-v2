@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BA Attendance Admin</title>
 <script src="admin-config.js?v=2.6.0"></script>
+<script src="attendance-review.js?v=4.6.5"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--pink:#db2777;--soft:#fff1f7;--line:#fbcfe8;--text:#4a2438;--muted:#8b5f74;--danger:#b91c1c;--ok:#166534}
@@ -620,18 +621,13 @@ async function loadAttendanceRequests(){
  try{const r=await api('attendance_requests',{status:attendanceRequestStatus});attendanceRequestRows=[...(r.corrections||[]).map(x=>({...x,kind:'correction'})),...(r.gps||[]).map(x=>({...x,kind:'gps'}))].sort((a,b)=>a.created_at.localeCompare(b.created_at));if(current==='attendance_requests')renderAttendanceRequests();}
  catch(e){attendanceRequestRows=[];$('content').innerHTML=`<div class="status err">${esc(e.message)}</div><button onclick="loadAttendanceRequests()">ลองใหม่</button>`;}
 }
-function legacyBreakRequest(x){return x.kind==='correction'&&/(พัก|เบรค|เบรก|break)/i.test(x.reason||'');}
+function legacyBreakRequest(x){return x.kind==='correction'&&['IN','OUT'].includes(x.request_side)&&/(พัก|เบรค|เบรก|break)/i.test(x.reason||'');}
 function renderAttendanceRequests(){
  if(attendanceRequestRows===null){loadAttendanceRequests();return;}
- $('content').innerHTML=`<h2>คำขอลงเวลา BA</h2><select onchange="attendanceRequestStatus=this.value;loadAttendanceRequests()">${[['PENDING','รออนุมัติ'],['APPROVED','อนุมัติแล้ว'],['REJECTED','ปฏิเสธแล้ว']].map(([v,l])=>`<option value="${v}" ${v===attendanceRequestStatus?'selected':''}>${l}</option>`).join('')}</select><button onclick="loadAttendanceRequests()">รีเฟรชคำขอ</button><p>คำขอ GPS ใช้เวลาที่ระบบได้รับคำขอ ส่วนคำขอเข้า–ออกงานเดิมใช้เวลาเริ่ม–เลิกกะ กรุณาตรวจสอบก่อนอนุมัติ แสดงได้สูงสุด 1,000 รายการต่อประเภท</p>`+table(['พนักงาน','ประเภท / เวลา','สาขา / เหตุผล','สถานะ','ดำเนินการ'],filterRows(attendanceRequestRows).map(x=>`<tr><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${x.kind==='gps'?'GPS · '+esc(eventNames[x.event_type]||x.event_type)+'<br>'+esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'})):esc(x.request_date)+' · '+(x.request_side==='IN'?'เข้างานตามกะ':'ออกงานตามกะ')}</td><td>${esc(x.offices?.office_name)}<br>${esc(x.reason)}${legacyBreakRequest(x)?'<br><strong>ประเภทคำขอไม่ตรงกับเรื่องพัก: ตรวจแก้รายการพักใน Attendance พร้อมเหตุผล แล้วปิดคำขอนี้</strong>':''}${x.kind==='gps'?'<br>ความคลาดเคลื่อน: '+esc(x.accuracy_meters??'ไม่มีพิกัด'):''}</td><td>${esc(x.status)}<br>${esc(x.reviewer_note||'')}</td><td>${x.status==='PENDING'?`<button ${legacyBreakRequest(x)?'disabled':''} onclick="reviewAttendanceRequest('${x.id}','${x.kind}','APPROVED')">อนุมัติ</button><button onclick="reviewAttendanceRequest('${x.id}','${x.kind}','REJECTED')">ปฏิเสธ</button>`:'—'}</td></tr>`));
+ $('content').innerHTML=`<h2>คำขอลงเวลา BA</h2><select onchange="attendanceRequestStatus=this.value;loadAttendanceRequests()">${[['PENDING','รออนุมัติ'],['APPROVED','อนุมัติแล้ว'],['REJECTED','ปฏิเสธแล้ว']].map(([v,l])=>`<option value="${v}" ${v===attendanceRequestStatus?'selected':''}>${l}</option>`).join('')}</select><button onclick="loadAttendanceRequests()">รีเฟรชคำขอ</button><p>ตรวจสอบประวัติและแก้ประเภท เวลา หรือสาขาก่อนอนุมัติ ระบบเก็บคำขอต้นฉบับและเหตุผลการแก้ไข แสดงได้สูงสุด 1,000 รายการต่อประเภท</p>`+table(['พนักงาน','ประเภท / เวลา','สาขา / เหตุผล','สถานะ','ดำเนินการ'],filterRows(attendanceRequestRows).map(x=>`<tr><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${x.kind==='gps'?'GPS · '+esc(eventNames[x.event_type]||x.event_type)+'<br>'+esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'})):esc(x.request_date)+' · '+esc(AttendanceReview.names[x.request_side]||x.request_side)}</td><td>${esc(x.offices?.office_name)}<br>${esc(x.reason)}${legacyBreakRequest(x)?'<br><strong>คำขออาจเลือกประเภทผิด: กดตรวจแก้และอนุมัติ เพื่อระบุรายการพักและเวลาจริง</strong>':''}${x.kind==='gps'?'<br>ความคลาดเคลื่อน: '+esc(x.accuracy_meters??'ไม่มีพิกัด'):''}</td><td>${esc(x.status)}<br>${esc(x.reviewer_note||'')}</td><td>${x.status==='PENDING'?`<button onclick="reviewAttendanceRequest('${x.id}','${x.kind}','APPROVED')">ตรวจแก้และอนุมัติ</button><button onclick="reviewAttendanceRequest('${x.id}','${x.kind}','REJECTED')">ปฏิเสธ</button>`:'—'}</td></tr>`));
 }
-async function reviewAttendanceRequest(id,kind,status){
- if(requestReviewBusy)return;
- const reason=prompt(status==='APPROVED'?'ตรวจสอบวันที่ สาขา และเวลาแล้ว ระบุเหตุผลอนุมัติ':'ระบุเหตุผลปฏิเสธ');if(!reason?.trim())return;
- requestReviewBusy=true;
- try{await api(kind==='gps'?'review_gps_request':'review_attendance_correction_request',{request_id:id,status,reason});msg('บันทึกผลคำขอแล้ว');await loadAttendanceRequests();}
- catch(e){msg(e.message,true);alert(e.message);}finally{requestReviewBusy=false;}
-}
+async function reviewAttendanceRequest(id,kind,status){return AttendanceReview.open({kind,id,decision:status,request:api,mount:html=>{$('content').innerHTML=html;},onDone:loadAttendanceRequests});}
+
 function render(){
  $('createCurrentBtn').classList.toggle('hidden',current==='attendance_requests');
  $('bulkScheduleBtn').classList.toggle('hidden',current!=='schedules');

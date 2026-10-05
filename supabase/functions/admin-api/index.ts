@@ -12,7 +12,7 @@ const cors = {
   'Access-Control-Allow-Headers':'content-type,x-admin-key',
   'Access-Control-Allow-Methods':'POST,OPTIONS'
 };
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.4'}});
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.5'}});
 const fail=(m:string,s=400)=>json({success:false,message:m},s);
 const now=()=>new Date().toISOString();
 
@@ -113,16 +113,13 @@ Deno.serve(async req=>{
  sb.from('attendance_gps_requests').select('*,employees(employee_code,display_name),offices(office_name)').eq('status',status).order('created_at').limit(1000)]);
  if(ce)throw ce;if(ge)throw ge;return json({success:true,corrections,gps});
 }
-if(action==='review_gps_request'){
- requiredReason(p);
- const {data,error}=await sb.rpc('ba_review_gps_attendance',{p_id:p.request_id,p_status:p.status,p_reason:p.reason,p_supervisor_id:null,p_actor:'ADMIN_WEB',p_admin:true});
+if(action==='attendance_review_context'||action==='review_attendance_request'){
+ const args:any={p_kind:p.kind,p_id:p.request_id,p_supervisor:null,p_actor:'ADMIN_WEB',p_admin:true};
+ if(action==='review_attendance_request')Object.assign(args,{p_status:p.status,p_reason:String(p.reason||'').trim(),p_events:p.events??null,p_history_version:p.history_version??null});
+ const {data,error}=await sb.rpc(action==='attendance_review_context'?'ba_attendance_review_context_v2':'ba_review_attendance_request_v2',args);
  if(error)return fail(error.message,409);return json({success:true,...data});
 }
-if(action==='review_attendance_correction_request'){
- requiredReason(p);
- const response=await fetch(SUPABASE_URL+'/functions/v1/ba-api',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':ADMIN_API_KEY},body:JSON.stringify({action:'admin_review_attendance_correction_request',payload:{request_id:p.request_id,status:p.status,reviewer_note:p.reason}})});
- const result=await response.json();return json(result,response.status);
-}
+if(action==='review_gps_request'||action==='review_attendance_correction_request')return fail('กรุณาเปิดหน้าใหม่ แล้วตรวจแก้ข้อมูลก่อนอนุมัติ',409);
 if(action==='bootstrap'){
       return json({success:true,data:await listAll()});
     }

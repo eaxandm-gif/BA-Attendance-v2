@@ -9,7 +9,7 @@ const GOOGLE_SYNC_URL = Deno.env.get('GOOGLE_SYNC_URL') || '';
 const GOOGLE_SYNC_SECRET = Deno.env.get('GOOGLE_SYNC_SECRET') || '';
 const sb = createClient(SUPABASE_URL, SERVICE_KEY, {auth:{persistSession:false}});
 const cors = {'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-admin-key,x-external-token,content-type','Access-Control-Allow-Methods':'POST,OPTIONS'};
-const json = (body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.4'}});
+const json = (body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.5'}});
 const fail=(m:string,s=400)=>json({success:false,message:m},s);
 const thaiDate=(d=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(d);
 const thaiMonth=()=>thaiDate().slice(0,7);
@@ -690,17 +690,7 @@ async function handler(req:Request){if(req.method==='OPTIONS')return new Respons
 if(String(action).startsWith('admin_')){if(!isAdmin)return fail('Admin Key ไม่ถูกต้อง',401);if(action==='admin_bootstrap')return json({success:true});
 
 
-if(action==='admin_review_attendance_correction_request'){
- const {data:r,error}=await sb.from('attendance_correction_requests').select('*,employees(*)').eq('id',p.request_id).single();if(error)throw error;
- let shift:any=null;
- if(p.status==='APPROVED'){
- const {data:sc,error:se}=await sb.from('employee_schedules').select('*').eq('employee_id',r.employee_id).eq('work_date',r.request_date).maybeSingle();if(se)throw se;
- shift=await resolveShift(r.employees,r.request_date,sc);
- if(!shift?.start_time||!shift?.end_time)return fail('ไม่พบกะทำงานของวันดังกล่าว');
- }
- const {data,error:reviewError}=await sb.rpc('ba_admin_review_attendance_correction',{p_request_id:r.id,p_status:p.status,p_reason:String(p.reviewer_note||'').trim(),p_shift_start:shift?.start_time||null,p_shift_end:shift?.end_time||null});
- if(reviewError)return fail(reviewError.message,409);
- return json({success:true,...data});
+if(action==='admin_review_attendance_correction_request'){return fail('กรุณาเปิดหน้าใหม่ แล้วตรวจแก้ข้อมูลก่อนอนุมัติ',409);
 }
 
 if(action==='admin_mobile_bootstrap'){
@@ -1727,28 +1717,21 @@ if(action==='pending_gps_requests'){
  const {data,error}=await sb.from('attendance_gps_requests').select('*,employees(employee_code,display_name),offices(office_name)').in('employee_id',(team||[]).map((e:any)=>e.id)).eq('status','PENDING').order('created_at');
  if(error)throw error;return json({success:true,rows:data||[]});
 }
-if(action==='review_gps_request'){
- ensureSupervisor(id);
- const {data,error}=await sb.rpc('ba_review_gps_attendance',{p_id:p.request_id,p_status:p.status,p_reason:String(p.reviewer_note||'').trim(),p_supervisor_id:id.ref.id,p_actor:id.profile.sub,p_admin:false});
- if(error)return fail(error.message,409);return json({success:true,...data});
+if(action==='review_gps_request'){return fail('กรุณาเปิดหน้าใหม่ แล้วตรวจแก้ข้อมูลก่อนอนุมัติ',409);
 }
 
 if(action==='submit_attendance_correction_request'){
-  if(id.role!=='EMPLOYEE')return fail('เฉพาะ BA');
-  const requestDate=String(p.request_date||''),requestSide=String(p.request_side||''),officeId=String(p.office_id||''),reason=String(p.reason||'').trim();
-  if(!requestDate)return fail('กรุณาระบุวันที่');
-  if(requestDate>thaiDate())return fail('ขอลงเวลาได้เฉพาะวันนี้หรือวันที่ผ่านมาแล้ว');
-  if(!['IN','OUT'].includes(requestSide))return fail('กรุณาเลือกว่าลืมลงเวลาเข้า หรือออก');
-  if(!officeId)return fail('กรุณาเลือกสาขา');
-  if(!reason)return fail('กรุณาระบุเหตุผล');
-  if(!id.ref.supervisor_id)return fail('พนักงานยังไม่ได้ผูก Supervisor');
-  const {data:office,error:officeError}=await sb.from('offices').select('id,office_name,active').eq('id',officeId).maybeSingle();
-  if(officeError)throw officeError;if(!office||office.active===false)return fail('ไม่พบสาขา หรือสาขาไม่ได้เปิดใช้งาน');
-  const payload={employee_id:id.ref.id,supervisor_id:id.ref.supervisor_id,request_date:requestDate,request_side:requestSide,office_id:officeId,reason,status:'PENDING',updated_at:new Date().toISOString()};
-  const {data,error}=await sb.from('attendance_correction_requests').insert(payload).select('*,offices(office_name)').single();
-  if(error){if(String(error.message||'').includes('attendance_correction_requests_one_pending_idx'))return fail('มีคำขอประเภทนี้ของวันดังกล่าวรออนุมัติอยู่แล้ว');throw error;}
-  await audit(id,'CREATE','attendance_correction_requests',data.id,null,data,reason);
-  return json({success:true,request:data});
+ if(id.role!=='EMPLOYEE')return fail('เฉพาะ BA',403);
+ if(!Array.isArray(p.events))return fail('กรุณาเปิดหน้าใหม่และระบุเวลาจริงที่ลืมกด');
+ const {data,error}=await sb.rpc('ba_submit_attendance_request_v2',{p_employee:id.ref.id,p_actor:id.profile.sub,p_date:p.request_date,p_side:p.request_side,p_events:p.events,p_reason:String(p.reason||'').trim(),p_key:String(p.request_key||'')});
+ if(error)return fail(error.message,409);return json({success:true,request:data});
+}
+if(action==='attendance_review_context'||action==='review_attendance_request'){
+ ensureSupervisor(id);
+ const args:any={p_kind:p.kind,p_id:p.request_id,p_supervisor:id.ref.id,p_actor:id.profile.sub,p_admin:false};
+ if(action==='review_attendance_request')Object.assign(args,{p_status:p.status,p_reason:String(p.reason||'').trim(),p_events:p.events??null,p_history_version:p.history_version??null});
+ const {data,error}=await sb.rpc(action==='attendance_review_context'?'ba_attendance_review_context_v2':'ba_review_attendance_request_v2',args);
+ if(error)return fail(error.message,409);return json({success:true,...data});
 }
 
 if(action==='set_my_day_status'){
@@ -2220,27 +2203,7 @@ if(action==='pending_attendance_correction_requests'){
   const {data,error}=await sb.from('attendance_correction_requests').select('*,employees(employee_code,display_name,ba_mode,default_shift_id,supervisor_id),offices(office_name)').in('employee_id',ids).eq('status','PENDING').order('request_date').order('created_at');
   if(error)throw error;return json({success:true,rows:data||[]});
 }
-if(action==='review_attendance_correction_request'){
-  ensureSupervisor(id);
-  await expireOldAttendanceCorrectionRequests();
-  const status=String(p.status||''),note=String(p.reviewer_note||'').trim();
-  if(!['APPROVED','REJECTED'].includes(status))return fail('สถานะไม่ถูกต้อง');if(!note)return fail('กรุณาระบุเหตุผลหรือหมายเหตุ');
-  const {data:reqData,error:reqError}=await sb.from('attendance_correction_requests').select('*,employees(*),offices(*)').eq('id',p.request_id).maybeSingle();
-  if(reqError)throw reqError;if(!reqData)return fail('ไม่พบคำขอ หรือคำขอนี้ถูกดำเนินการแล้ว');if(reqData.employees?.supervisor_id!==id.ref.id)return fail('ไม่มีสิทธิ์จัดการคำขอนี้');
-  let shift:any=null;
-  if(status==='APPROVED'){
-    const {data:schedule,error:scheduleError}=await sb.from('employee_schedules').select('*').eq('employee_id',reqData.employee_id).eq('work_date',reqData.request_date).maybeSingle();
-    if(scheduleError)throw scheduleError;
-    shift=await resolveShift(reqData.employees,reqData.request_date,schedule);
-    if(!shift?.start_time||!shift?.end_time)return fail('ไม่พบเวลาเริ่ม–เลิกของ Shift วันดังกล่าว');
-  }
-  const {data:review,error:reviewError}=await sb.rpc('ba_review_attendance_correction',{
-    p_request_id:reqData.id,p_supervisor_id:id.ref.id,p_actor:id.profile.sub,
-    p_status:status,p_reason:note,p_shift_start:shift?.start_time||null,p_shift_end:shift?.end_time||null
-  });
-  if(reviewError)throw reviewError;
-  if(status==='APPROVED')await sync(reqData.request_date,reqData.employee_id);
-  return json({success:true,...review});
+if(action==='review_attendance_correction_request'){return fail('กรุณาเปิดหน้าใหม่ แล้วตรวจแก้ข้อมูลก่อนอนุมัติ',409);
 }
 
 if(action==='pending_shift_requests'){

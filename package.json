@@ -1,14 +1,15 @@
 {
   "private": true,
   "name": "ba-attendance",
-  "version": "4.6.4",
+  "version": "4.6.5",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "test": "node tests/frontend-attendance.mjs && node tests/attendance-ordering.mjs"
+    "test": "node tests/frontend-attendance.mjs && node tests/attendance-review.mjs && node tests/attendance-ordering.mjs"
   },
   "devDependencies": {
-    "embedded-postgres": "18.4.0-beta.17"
+    "embedded-postgres": "18.4.0-beta.17",
+    "jsdom": "^26.1.0"
   }
 }
