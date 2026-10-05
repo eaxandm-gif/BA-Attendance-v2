@@ -20,4 +20,9 @@ await check('both transport paths preserve HTTP failure status',async()=>{const 
 await check('server GPS rejection clears submit intent and offers location recovery instead of generic error',async()=>{let recovery=0;const h=harness({request:async()=>{const e=Error('GPS');e.status=422;e.code='GPS_ACCURACY';e.office_id='office';throw e;}});h.c.showLocationRetryError=()=>recovery++;await h.c.submitAttendance('BREAK_OUT');assert.equal(recovery,1);assert.equal(h.storage.size,0);});
 await check('location freshness rejects missing, old and future fixes; validates coordinate range',()=>{const start=html.indexOf('const LOCATION_TARGET_ACCURACY_METERS'),end=html.indexOf('async function requestWatchLocation',start);const c={Date,Number};vm.createContext(c);vm.runInContext(html.slice(start,end),c);const p={timestamp:Date.now(),coords:{latitude:13,longitude:100,accuracy:30}};assert.equal(c.isFreshPosition(p),true);assert.equal(c.isFreshPosition({...p,timestamp:Date.now()-31000}),false);assert.equal(c.isFreshPosition({...p,timestamp:Date.now()+10000}),false);assert.equal(c.isFreshPosition({coords:p.coords}),false);assert.equal(c.validLocationPosition({...p,coords:{...p.coords,latitude:91}}),false);});
 
+await check('attendance home omits GPS status shortcut while retaining GPS recovery requests',()=>{
+ assert.doesNotMatch(html,/สถานะคำขอ GPS|onclick="showGpsRequest\(\)"/);
+ assert.match(html,/async function showGpsRequest\(type\)/);
+ assert.match(html,/async function showPendingGpsRequests\(/);
+});
 console.log(`${passed} frontend test groups passed; inline scripts parsed`);
