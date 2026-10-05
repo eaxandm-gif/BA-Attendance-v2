@@ -15,9 +15,9 @@ A GPS accuracy rejection previously ended in a generic error dialog. Employees h
 
 Run `npm install` and `npm test` using Node 24+. If npm blocks the pinned embedded-postgres postinstall, run its platform package's `scripts/hydrate-symlinks.js` before testing. PostgreSQL tests use a disposable local cluster, never production records.
 
-26 PostgreSQL groups and 8 frontend groups cover previous behavior, GPS queue and replay, changed histories, supervisor scope, service-only permissions, administrator correction and concurrent approvals. Backend transpilation and frontend script syntax are also checked.
+27 PostgreSQL groups and 8 frontend groups cover previous behavior, GPS queue and replay, changed histories, supervisor scope, service-only permissions, administrator correction and concurrent approvals. Backend transpilation and frontend script syntax are also checked.
 
-Apply `202610050001_admin_correction_review.sql` then `202610050002_gps_attendance_requests.sql`, deploy both Edge Functions preserving existing auth configuration, then publish frontend files. These migrations do not approve requests or alter employee histories. New table RLS is enabled with no public/employee direct access; backend endpoints enforce identity.
+Apply `202610050001_admin_correction_review.sql` then `202610050002_gps_attendance_requests.sql` and `202610050003_legacy_break_request_guard.sql`, deploy both Edge Functions preserving existing auth configuration, then publish frontend files. These migrations do not approve requests or alter employee histories. New table RLS is enabled with no public/employee direct access; backend endpoints enforce identity.
 
 ## Audit findings and remaining work
 
@@ -30,3 +30,5 @@ Apply `202610050001_admin_correction_review.sql` then `202610050002_gps_attendan
 7. **Medium priority:** Large bootstrap/history queries have fixed row limits; add pagination and explicit truncation indicators beyond the request queue.
 
 This is a source, schema and attendance-workflow review with targeted regression tests, not a full penetration test or payroll audit. No real employee requests are approved for testing.
+
+Live queue review also found legacy start/end requests whose reasons explicitly refer to breaks. Their approval is now blocked in the shared database correction function and admin UI; reviewers must correct the intended break event through audited Attendance management and close the mismatched request. The guard uses explicit Thai/English break keywords and cannot infer every ambiguous free-text reason.
