@@ -43,7 +43,7 @@
 
       if (!response.ok || result.success === false) {
         const error=new Error(result.message || `เกิดข้อผิดพลาด HTTP ${response.status}`);
-        error.status=response.status;
+        error.status=response.status; error.code=result.code; error.office_id=result.office_id;
         throw error;
       }
 

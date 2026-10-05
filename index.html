@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <!-- BA Attendance frontend v4.6.3 ATOMIC_ATTENDANCE_ORDER -->
+  <!-- BA Attendance frontend v4.6.4 ATOMIC_ATTENDANCE_ORDER -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BA Attendance</title>
@@ -28,7 +28,7 @@ button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7
 </style>
 
 <style id="v420-mobile-style">
-/* v4.6.3 mobile cosmetic UI inspired by the reference, using existing pink tone */
+/* v4.6.4 mobile cosmetic UI inspired by the reference, using existing pink tone */
 .mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
 .mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
 .mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
@@ -88,7 +88,7 @@ async function appRequest(action,payload={}){
       if(String(message).includes('หมดอายุ')){
         throw new Error('ลิงก์ลงเวลาหมดอายุ กรุณากลับไปเปิด BA Attendance ใน LINE แล้วกดเปิด Safari ใหม่');
       }
-      const error=new Error(message); error.status=r.status; throw error;
+      const error=new Error(message); error.status=r.status; error.code=data.code; error.office_id=data.office_id; throw error;
     }
     return Object.prototype.hasOwnProperty.call(data,'data')?data.data:data;
   }finally{clearTimeout(timer)}
@@ -113,7 +113,9 @@ function showLocationRetryError(message,type){
     <div class="grid" style="gap:10px">
       <button class="primary" id="retryLocationBtn">ลองใหม่</button>
       <button id="openSafariLocationBtn">เปิดใน Safari</button>
+      <button class="primary full" id="gpsRequestBtn">อยู่ที่สาขาแล้ว · ส่งคำขอลงเวลา</button>
     </div>`);
+  const request=$('gpsRequestBtn');if(request)request.onclick=()=>showGpsRequest(safeType);
   const retry=$('retryLocationBtn');
   if(retry)retry.onclick=()=>{
     closeModal();
@@ -148,7 +150,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.6.3';
+      $('version').textContent='v4.6.4';
       await renderExternalEmployeeHome();
       return;
     }
@@ -165,7 +167,7 @@ async function init(){
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.6.3';
+    $('version').textContent='v4.6.4';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -189,7 +191,7 @@ async function renderExternalEmployeeHome(){
 สาขาปัจจุบัน: ${esc(r.state.office_name||'-')}
 Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}</div>
       ${r.attendance_issue?`<div class="item error">${esc(r.attendance_issue)}</div>`:''}
-      <div class="grid" id="actionGrid"></div>
+      <div class="grid" id="actionGrid"></div><button class="full" onclick="showGpsRequest()">สถานะคำขอ GPS</button>
     </div>
     <div class="card">
       <div class="title">รายการกดเวลาวันนี้</div>
@@ -222,7 +224,7 @@ async function renderEmployeeHome(){
         <div><b>พักรวม:</b> ${hm(r.summary?.break_minutes||0)} · <b>เกิน:</b> ${hm(r.summary?.over_minutes||0)} · <b>ขาด:</b> ${hm(r.summary?.short_minutes||0)}</div>
       </div>
       ${r.attendance_issue?`<div class="item error">${esc(r.attendance_issue)}</div>`:''}
-      <div class="grid" id="actionGrid"></div>
+      <div class="grid" id="actionGrid"></div><button class="full" onclick="showGpsRequest()">สถานะคำขอ GPS</button>
     </div>
     <div class="card">
       <div class="title">รายการกดเวลาวันนี้</div>
@@ -311,7 +313,7 @@ function validLocationPosition(position){
   const lat=Number(position.coords.latitude);
   const lng=Number(position.coords.longitude);
   const accuracy=Number(position.coords.accuracy||999999);
-  return Number.isFinite(lat)&&Number.isFinite(lng)&&
+  return Number.isFinite(lat)&&Math.abs(lat)<=90&&Number.isFinite(lng)&&Math.abs(lng)<=180&&
     Number.isFinite(accuracy)&&accuracy>0;
 }
 
@@ -320,13 +322,14 @@ function positionAccuracy(position){
 }
 
 function isFreshPosition(position){
-  const timestamp=Number(position?.timestamp||Date.now());
-  return Date.now()-timestamp<=LOCATION_FRESH_AGE_MS;
+  const timestamp=Number(position?.timestamp);
+  const age=Date.now()-timestamp;
+  return Number.isFinite(timestamp)&&age>=-1000&&age<=LOCATION_FRESH_AGE_MS;
 }
 
 async function requestWatchLocation(seedPosition=null){
   return await new Promise((resolve,reject)=>{
-    let best=validLocationPosition(seedPosition)?seedPosition:null;
+    let best=validLocationPosition(seedPosition)&&isFreshPosition(seedPosition)?seedPosition:null;
     let settled=false;
     let watchId=null;
     let timer=null;
@@ -430,7 +433,7 @@ async function requestBestLocation(){
     if(watchError?.code===1)throw watchError;
 
     // ถ้า watch ล้ม แต่ first fix ใช้ได้ตามเพดาน ให้ใช้ first fix
-    if(validLocationPosition(firstPosition)&&
+    if(validLocationPosition(firstPosition)&&isFreshPosition(firstPosition)&&
        positionAccuracy(firstPosition)<=LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS){
       return firstPosition;
     }
@@ -444,7 +447,7 @@ async function requestBestLocation(){
         timeout:LOCATION_FALLBACK_TIMEOUT_MS
       });
 
-      if(validLocationPosition(fallback)&&
+      if(validLocationPosition(fallback)&&isFreshPosition(fallback)&&
          positionAccuracy(fallback)<=LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS){
         return fallback;
       }
@@ -456,7 +459,7 @@ async function requestBestLocation(){
             maximumAge:0,
             timeout:12000
           });
-          if(validLocationPosition(finalTry)&&
+          if(validLocationPosition(finalTry)&&isFreshPosition(finalTry)&&
              positionAccuracy(finalTry)<=LOCATION_MAX_ACCEPTABLE_ACCURACY_METERS){
             return finalTry;
           }
@@ -522,6 +525,7 @@ function showAttendanceRetry(message,type){
   openModal(`<div class="title">ยังยืนยันการบันทึกไม่ได้</div><div class="item">${esc(message)}</div><button class="primary full" id="retryAttendanceBtn">ตรวจสอบและลองอีกครั้ง</button>`);
   $('retryAttendanceBtn').onclick=()=>submitAttendance(type);
 }
+let lastAttendancePosition=null, gpsOfficeId=null;
 async function submitAttendance(type){
   if(attendanceSubmitting)return;
   const pending=getPendingAttendance();
@@ -535,6 +539,7 @@ async function submitAttendance(type){
   showLoadingModal('กำลังตรวจตำแหน่ง');
   try{
     const p=await requestBestLocation();
+    lastAttendancePosition=p;
     const intent=pending||{type,request_key:crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`};
     savePendingAttendance(intent);
     await appRequest('submit_attendance',{
@@ -549,9 +554,12 @@ async function submitAttendance(type){
       openModal('<div class="title">บันทึกเวลาแล้ว</div><div class="item">โหลดหน้าล่าสุดไม่สำเร็จ กรุณาโหลดใหม่</div><button class="primary full" id="refreshAttendanceBtn">โหลดใหม่</button>');
       $('refreshAttendanceBtn').onclick=()=>location.reload();
     }else if(e?.code===1){
-      showLocationPermissionFallback();
+      showLocationRetryError('ยังไม่ได้อนุญาตให้ใช้ตำแหน่ง กรุณาเปิด Location และ Precise Location หรือส่งคำขอให้ตรวจสอบ',type);
     }else if(typeof e?.code==='number'){
       showLocationRetryError(geolocationErrorMessage(e),type);
+    }else if(['GPS_ACCURACY','GPS_OUTSIDE'].includes(e?.code)){
+      savePendingAttendance(null); gpsOfficeId=e.office_id;
+      showLocationRetryError('เครื่องยังยืนยันตำแหน่งไม่ได้ หากอยู่ที่สาขาแล้ว สามารถส่งคำขอให้ตรวจสอบเวลาได้',type);
     }else if(e?.status>=400&&e.status<500){
       savePendingAttendance(null);
       try{await refreshAttendanceHome()}catch(_){}
@@ -564,6 +572,37 @@ async function submitAttendance(type){
     if(!committed)document.querySelectorAll('#actionGrid button').forEach(b=>b.disabled=false);
   }
 }
+
+
+let gpsRequestIntent=null;
+async function showGpsRequest(type){
+ showLoadingModal('กำลังโหลดคำขอ');
+ try{
+ const r=await appRequest('gps_request_setup');
+ const pending=(r.requests||[]).find(x=>x.status==='PENDING');
+ if(pending){openModal(`<div class="title">มีคำขอรออนุมัติ</div><div class="item">${esc(labels[pending.event_type])} · ${esc(new Date(pending.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}<br>${esc(pending.offices?.office_name)}<br>กรุณาติดต่อหัวหน้างานหรือแอดมิน เมื่ออนุมัติแล้วจึงลงเวลารายการถัดไป</div><button class="primary full" onclick="refreshAttendanceHome();closeModal()">ตรวจสถานะล่าสุด</button>`);return;}
+ if(!type){openModal(`<div class="title">คำขอ GPS ของฉัน</div>${(r.requests||[]).map(x=>`<div class="item">${esc(labels[x.event_type])} · ${esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}<br>${esc(x.status)} · ${esc(x.reviewer_note||'')}</div>`).join('')||'<div class="item">ยังไม่มีคำขอ</div>'}`);return;}
+ gpsRequestIntent={type,request_key:crypto.randomUUID()};
+ openModal(`<div class="title">ขอ${esc(labels[type]||type)} — GPS ใช้ไม่ได้</div><div class="item">ระบบจะบันทึกเวลาที่ได้รับคำขอนี้ รอหัวหน้างานหรือแอดมินตรวจสอบก่อนนำไปลงเวลา ยังไม่ถือว่าลงเวลาสำเร็จ</div><div class="field"><label>สาขาที่อยู่จริง</label><select id="gpsOffice">${(r.offices||[]).map(o=>`<option value="${esc(o.id)}" ${o.id===(gpsOfficeId||r.assigned_office_id)?'selected':''}>${esc(o.office_name)}</option>`).join('')}</select></div><div class="field"><label>เหตุผล / จุดที่อยู่ในร้าน</label><textarea id="gpsReason" maxlength="1000" placeholder="เช่น อยู่หน้าตู้สินค้า แต่ GPS คลาดเคลื่อน"></textarea></div><button class="primary full" id="sendGpsRequest">ส่งคำขอให้ตรวจสอบ</button>`);
+ $('sendGpsRequest').onclick=submitGpsRequest;
+ }catch(e){showModalError(e.message)}
+}
+async function submitGpsRequest(){
+ const btn=$('sendGpsRequest');if(btn.disabled)return;
+ const reason=$('gpsReason').value.trim();if(!reason)return alert('กรุณาระบุเหตุผล');
+ btn.disabled=true;
+ try{
+ const c=lastAttendancePosition&&isFreshPosition(lastAttendancePosition)?lastAttendancePosition.coords:null;
+ const result=await appRequest('submit_gps_request',{...gpsRequestIntent,office_id:$('gpsOffice').value,reason,latitude:c?.latitude??null,longitude:c?.longitude??null,accuracy:c?.accuracy??null});
+ savePendingAttendance(null);
+ openModal(`<div class="title">ส่งคำขอแล้ว</div><div class="item">${esc(labels[result.request.event_type])} · ${esc(new Date(result.request.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}<br>รอหัวหน้างานหรือแอดมินอนุมัติ กรุณาติดต่อผู้อนุมัติก่อนลงเวลารายการถัดไป</div>`);
+ }catch(e){alert(e.message);btn.disabled=false;}
+}
+async function showPendingGpsRequests(){
+ showLoadingModal('กำลังโหลดคำขอ GPS');
+ try{const r=await BA_API.request('pending_gps_requests');openModal(`<div class="title">คำขอ GPS รออนุมัติ</div>${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>${esc(labels[x.event_type])} · ${esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}</div><div>${esc(x.offices?.office_name)} · ${esc(x.reason)}</div><div>GPS คลาดเคลื่อน: ${x.accuracy_meters==null?'ไม่มีพิกัด':esc(x.accuracy_meters)+' เมตร'}</div><button onclick="reviewGpsRequest('${x.id}','APPROVED')">อนุมัติ</button><button onclick="reviewGpsRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div>`).join('')||'<div class="item">ไม่มีคำขอ</div>'}`)}catch(e){showModalError(e.message)}
+}
+async function reviewGpsRequest(request_id,status){const reviewer_note=prompt('ยืนยันตรวจสอบการอยู่ที่สาขาแล้ว ระบุเหตุผลการอนุมัติ/ปฏิเสธ');if(!reviewer_note?.trim())return;try{await BA_API.request('review_gps_request',{request_id,status,reviewer_note});await showPendingGpsRequests()}catch(e){alert(e.message)}}
 
 async function showOfficeLocationRequest(){
   showLoadingModal('กำลังโหลดคำขอออฟฟิศ');
@@ -995,7 +1034,7 @@ async function reviewOfficeLocationFromInbox(id,decision){
 }
 
 
-async function showPendingAttendanceRequests(){showLoadingModal('กำลังโหลดคำขอลงเวลา');try{const r=await BA_API.request('pending_attendance_correction_requests');openModal(`<div class="title">คำขอลงเวลารออนุมัติ</div><div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>วันที่: ${esc(x.request_date)}</div><div>ลืมลงเวลา: ${x.request_side==='IN'?'เข้า':'ออก'}</div><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div class="muted">อนุมัติแล้วจะใช้เวลา${x.request_side==='IN'?'เริ่ม':'เลิก'}กะ และแทนที่ Event ประเภทเดียวกัน</div><div class="grid"><button class="green" onclick="reviewAttendanceCorrectionRequest('${x.id}','APPROVED')">อนุมัติ</button><button class="red" onclick="reviewAttendanceCorrectionRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลารออนุมัติ</div>'}</div>`)}catch(e){showModalError(e.message)}}
+async function showPendingAttendanceRequests(){showLoadingModal('กำลังโหลดคำขอลงเวลา');try{const r=await BA_API.request('pending_attendance_correction_requests');openModal(`<div class="title">คำขอลงเวลารออนุมัติ</div><button class="primary full" onclick="showPendingGpsRequests()">คำขอ GPS / ออกพัก / กลับจากพัก</button><div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>วันที่: ${esc(x.request_date)}</div><div>ลืมลงเวลา: ${x.request_side==='IN'?'เข้า':'ออก'}</div><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div class="muted">อนุมัติแล้วจะใช้เวลา${x.request_side==='IN'?'เริ่ม':'เลิก'}กะ และแทนที่ Event ประเภทเดียวกัน</div><div class="grid"><button class="green" onclick="reviewAttendanceCorrectionRequest('${x.id}','APPROVED')">อนุมัติ</button><button class="red" onclick="reviewAttendanceCorrectionRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลารออนุมัติ</div>'}</div>`)}catch(e){showModalError(e.message)}}
 async function reviewAttendanceCorrectionRequest(id,status){const note=prompt('เหตุผล/หมายเหตุ Supervisor');if(!note)return;try{await BA_API.request('review_attendance_correction_request',{request_id:id,status,reviewer_note:note});alert(status==='APPROVED'?'อนุมัติแล้ว ระบบอัปเดต Attendance และสรุปรายวัน/รายเดือนแล้ว':'ปฏิเสธคำขอแล้ว');await renderSupervisorHome();showPendingAttendanceRequests()}catch(e){alert(e.message)}}
 async function showPendingShiftRequests(){
   showLoadingModal('กำลังโหลดคำขอ');
@@ -1052,7 +1091,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.6.3';
+  $('version').textContent='v4.6.4';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -1128,7 +1167,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.6.3';
+  $('version').textContent='v4.6.4';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}

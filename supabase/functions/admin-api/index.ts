@@ -12,7 +12,7 @@ const cors = {
   'Access-Control-Allow-Headers':'content-type,x-admin-key',
   'Access-Control-Allow-Methods':'POST,OPTIONS'
 };
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8'}});
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.4'}});
 const fail=(m:string,s=400)=>json({success:false,message:m},s);
 const now=()=>new Date().toISOString();
 
@@ -100,13 +100,30 @@ Deno.serve(async req=>{
   try{
     if(req.method==='OPTIONS') return new Response('ok',{headers:cors});
     if(req.method!=='POST') return fail('Method not allowed',405);
-    if(req.headers.get('X-Admin-Key')!==ADMIN_API_KEY) return fail('Admin Key ไม่ถูกต้อง',401);
+    if(!ADMIN_API_KEY||req.headers.get('X-Admin-Key')!==ADMIN_API_KEY) return fail('Admin Key ไม่ถูกต้อง',401);
 
     const body=await req.json().catch(()=>({}));
     const action=body.action;
     const p=body.payload||{};
 
-    if(action==='bootstrap'){
+    if(action==='attendance_requests'){
+ const status=String(p.status||'PENDING');if(!['PENDING','APPROVED','REJECTED'].includes(status))return fail('สถานะไม่ถูกต้อง');
+ const [{data:corrections,error:ce},{data:gps,error:ge}]=await Promise.all([
+ sb.from('attendance_correction_requests').select('*,employees(employee_code,display_name),offices(office_name)').eq('status',status).order('created_at').limit(1000),
+ sb.from('attendance_gps_requests').select('*,employees(employee_code,display_name),offices(office_name)').eq('status',status).order('created_at').limit(1000)]);
+ if(ce)throw ce;if(ge)throw ge;return json({success:true,corrections,gps});
+}
+if(action==='review_gps_request'){
+ requiredReason(p);
+ const {data,error}=await sb.rpc('ba_review_gps_attendance',{p_id:p.request_id,p_status:p.status,p_reason:p.reason,p_supervisor_id:null,p_actor:'ADMIN_WEB',p_admin:true});
+ if(error)return fail(error.message,409);return json({success:true,...data});
+}
+if(action==='review_attendance_correction_request'){
+ requiredReason(p);
+ const response=await fetch(SUPABASE_URL+'/functions/v1/ba-api',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':ADMIN_API_KEY},body:JSON.stringify({action:'admin_review_attendance_correction_request',payload:{request_id:p.request_id,status:p.status,reviewer_note:p.reason}})});
+ const result=await response.json();return json(result,response.status);
+}
+if(action==='bootstrap'){
       return json({success:true,data:await listAll()});
     }
 

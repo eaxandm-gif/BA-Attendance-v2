@@ -9,7 +9,7 @@ const GOOGLE_SYNC_URL = Deno.env.get('GOOGLE_SYNC_URL') || '';
 const GOOGLE_SYNC_SECRET = Deno.env.get('GOOGLE_SYNC_SECRET') || '';
 const sb = createClient(SUPABASE_URL, SERVICE_KEY, {auth:{persistSession:false}});
 const cors = {'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-admin-key,x-external-token,content-type','Access-Control-Allow-Methods':'POST,OPTIONS'};
-const json = (body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.3'}});
+const json = (body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.4'}});
 const fail=(m:string,s=400)=>json({success:false,message:m},s);
 const thaiDate=(d=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(d);
 const thaiMonth=()=>thaiDate().slice(0,7);
@@ -689,6 +689,20 @@ function shiftBoundaryIso(workDate:string,startTime:any,endTime:any,side:'IN'|'O
 async function handler(req:Request){if(req.method==='OPTIONS')return new Response('ok',{headers:cors});if(req.method!=='POST')return fail('Method not allowed',405);const body=await req.json().catch(()=>({}));const action=body.action,p=body.payload||{};const isAdmin=req.headers.get('X-Admin-Key')===ADMIN_API_KEY;
 if(String(action).startsWith('admin_')){if(!isAdmin)return fail('Admin Key ไม่ถูกต้อง',401);if(action==='admin_bootstrap')return json({success:true});
 
+
+if(action==='admin_review_attendance_correction_request'){
+ const {data:r,error}=await sb.from('attendance_correction_requests').select('*,employees(*)').eq('id',p.request_id).single();if(error)throw error;
+ let shift:any=null;
+ if(p.status==='APPROVED'){
+ const {data:sc,error:se}=await sb.from('employee_schedules').select('*').eq('employee_id',r.employee_id).eq('work_date',r.request_date).maybeSingle();if(se)throw se;
+ shift=await resolveShift(r.employees,r.request_date,sc);
+ if(!shift?.start_time||!shift?.end_time)return fail('ไม่พบกะทำงานของวันดังกล่าว');
+ }
+ const {data,error:reviewError}=await sb.rpc('ba_admin_review_attendance_correction',{p_request_id:r.id,p_status:p.status,p_reason:String(p.reviewer_note||'').trim(),p_shift_start:shift?.start_time||null,p_shift_end:shift?.end_time||null});
+ if(reviewError)return fail(reviewError.message,409);
+ return json({success:true,...data});
+}
+
 if(action==='admin_mobile_bootstrap'){
   const [{data:offices,error:officeError},{data:supervisors,error:supervisorError},{data:pending,error:pendingError},{data:employees,error:employeeError}]=await Promise.all([
     sb.from('offices').select('id,office_code,office_name,region,active').eq('active',true).order('office_name'),
@@ -1244,7 +1258,7 @@ if(action==='supervisor_monthly_to_yesterday'){
 }
 
 
-if(id.auth_mode==='EXTERNAL'&&!['bootstrap','employee_home','submit_attendance'].includes(String(action))){
+if(id.auth_mode==='EXTERNAL'&&!['bootstrap','employee_home','submit_attendance','gps_request_setup','submit_gps_request'].includes(String(action))){
   return fail('ลิงก์ภายนอกใช้ได้เฉพาะการลงเวลา',403);
 }
 if(action==='create_external_session'){
@@ -1417,12 +1431,11 @@ if(id.role==='EMPLOYEE'){
 
   const maxAllowedAccuracy=allowedAccuracyForOffice(targetOffice);
   if(!Number.isFinite(accuracy)||accuracy<=0||accuracy>maxAllowedAccuracy){
-    return fail(
+    return json({success:false,code:'GPS_ACCURACY',office_id:targetOffice.id,message:
       `ความแม่นยำ GPS ยังต่ำเกินไป (${Math.round(accuracy||0)} เมตร) `+
       `สำหรับสาขา ${targetOffice.office_name||'-'} `+
       `(รัศมีสาขา ${Math.round(Number(targetOffice.radius_meters||0))} เมตร, `+
-      `ระบบยอมรับได้ไม่เกิน ${Math.round(maxAllowedAccuracy)} เมตร)`
-    );
+      `ระบบยอมรับได้ไม่เกิน ${Math.round(maxAllowedAccuracy)} เมตร)`},422);
   }
 
   const targetDistance=distance(
@@ -1434,10 +1447,9 @@ if(id.role==='EMPLOYEE'){
   const allowedRadius=Number(targetOffice.radius_meters||0);
 
   if(targetDistance>allowedRadius){
-    return fail(
+    return json({success:false,code:'GPS_OUTSIDE',office_id:targetOffice.id,message:
       `Location ไม่ตรงกับสาขา ${targetOffice.office_name||'-'} `+
-      `(ห่าง ${Math.round(targetDistance)} เมตร, ความแม่นยำ ${Math.round(accuracy)} เมตร)`
-    );
+      `(ห่าง ${Math.round(targetDistance)} เมตร, ความแม่นยำ ${Math.round(accuracy)} เมตร)`},422);
   }
 
   let officeId=targetOffice.id;
@@ -1695,6 +1707,31 @@ if(action==='my_shift_requests'){
   return json({success:true,rows:data||[]});
 }
 
+
+
+if(action==='gps_request_setup'){
+ if(id.role!=='EMPLOYEE')return fail('เฉพาะ BA',403);
+ const [{data:offices,error:oe},{data:requests,error:re}]=await Promise.all([
+ sb.from('offices').select('id,office_name').eq('active',true).order('office_name'),
+ sb.from('attendance_gps_requests').select('*,offices(office_name)').eq('employee_id',id.ref.id).order('created_at',{ascending:false}).limit(30)]);
+ if(oe)throw oe;if(re)throw re;return json({success:true,offices,requests,assigned_office_id:id.ref.assigned_office_id});
+}
+if(action==='submit_gps_request'){
+ if(id.role!=='EMPLOYEE')return fail('เฉพาะ BA',403);
+ const {data,error}=await sb.rpc('ba_request_gps_attendance',{p_employee_id:id.ref.id,p_actor:id.profile.sub,p_event_type:p.type,p_office_id:p.office_id,p_reason:String(p.reason||'').trim(),p_key:String(p.request_key||''),p_latitude:p.latitude??null,p_longitude:p.longitude??null,p_accuracy:p.accuracy??null});
+ if(error)return fail(error.message,409);return json({success:true,request:data});
+}
+if(action==='pending_gps_requests'){
+ ensureSupervisor(id);
+ const {data:team,error:te}=await sb.from('employees').select('id').eq('supervisor_id',id.ref.id);if(te)throw te;
+ const {data,error}=await sb.from('attendance_gps_requests').select('*,employees(employee_code,display_name),offices(office_name)').in('employee_id',(team||[]).map((e:any)=>e.id)).eq('status','PENDING').order('created_at');
+ if(error)throw error;return json({success:true,rows:data||[]});
+}
+if(action==='review_gps_request'){
+ ensureSupervisor(id);
+ const {data,error}=await sb.rpc('ba_review_gps_attendance',{p_id:p.request_id,p_status:p.status,p_reason:String(p.reviewer_note||'').trim(),p_supervisor_id:id.ref.id,p_actor:id.profile.sub,p_admin:false});
+ if(error)return fail(error.message,409);return json({success:true,...data});
+}
 
 if(action==='submit_attendance_correction_request'){
   if(id.role!=='EMPLOYEE')return fail('เฉพาะ BA');
