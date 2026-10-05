@@ -1,0 +1,17 @@
+import fs from 'node:fs';import vm from 'node:vm';import assert from 'node:assert/strict';
+const html=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');const start=html.indexOf('function bangkokDateKey('),end=html.indexOf('function buildMonthlyMatrix(',start);
+const DATA={daily:[],schedules:[],leaves:[],attendance:[],shifts:[]},ctx=vm.createContext({DATA,Intl,Date,Set,Map});vm.runInContext(html.slice(start,end),ctx);
+const date='2026-09-24',emp={id:'test',ba_mode:'STOCK_REFILL'};
+const event=(event_type,time)=>({employee_id:emp.id,event_type,occurred_at:`${date}T${time}:00+07:00`});
+DATA.attendance=[event('REFILL_IN','09:40'),event('REFILL_OUT','11:15'),event('WORK_IN','11:55')];DATA.daily=[{employee_id:emp.id,work_date:date,first_in:`${date}T11:55:00+07:00`,last_out:null,status:'WORKING'}];
+let r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.first_in,'11:55');assert.equal(r.last_out,'');assert.equal(r.status,'WORKING');
+DATA.daily=[];r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.first_in,'11:55');assert.equal(r.last_out,'');assert.equal(r.credited_minutes,0);
+DATA.attendance.push(event('WORK_OUT','20:00'),event('REFILL_IN','21:00'),event('REFILL_OUT','22:00'));r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.last_out,'20:00');
+console.log('PASS refill before/after work never becomes shift boundary, with or without summary');
+emp.ba_mode='MULTI_BRANCH';DATA.attendance=[event('DAY_IN','09:00'),event('BRANCH_IN','10:00'),event('BRANCH_OUT','11:00')];r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.first_in,'09:00');assert.equal(r.last_out,'');DATA.attendance.push(event('DAY_OUT','20:00'));assert.equal(ctx.summaryForEmployeeDate(emp,date).last_out,'20:00');
+console.log('PASS branch exit does not mean day checkout');
+emp.ba_mode='FIXED_BRANCH';DATA.attendance=[event('IN','11:00'),event('BREAK_OUT','12:00'),event('BREAK_IN','13:00'),event('OUT','20:00')];r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.first_in,'11:00');assert.equal(r.last_out,'20:00');
+DATA.daily=[{employee_id:emp.id,work_date:date,first_in:null,last_out:null,status:'NOT_STARTED'}];r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.first_in,'');assert.equal(r.last_out,'');
+console.log('PASS fixed branch unaffected; null summary boundaries are authoritative');
+emp.ba_mode='STOCK_REFILL';DATA.daily=[];DATA.attendance=[event('REFILL_IN','09:00'),event('REFILL_OUT','10:00')];const map=new Map([[`${emp.id}:${date}`,DATA.attendance]]);assert.equal(ctx.matrixStatusForDate(emp,date,map),'INC');
+console.log('PASS historical monthly matrix does not treat refill pair as completed work');
