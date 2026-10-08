@@ -15,3 +15,11 @@ DATA.daily=[{employee_id:emp.id,work_date:date,first_in:null,last_out:null,statu
 console.log('PASS fixed branch unaffected; null summary boundaries are authoritative');
 emp.ba_mode='STOCK_REFILL';DATA.daily=[];DATA.attendance=[event('REFILL_IN','09:00'),event('REFILL_OUT','10:00')];const map=new Map([[`${emp.id}:${date}`,DATA.attendance]]);assert.equal(ctx.matrixStatusForDate(emp,date,map),'INC');
 console.log('PASS historical monthly matrix does not treat refill pair as completed work');
+emp.ba_mode='MULTI_BRANCH';emp.default_shift_id="'Noon12'::text";
+DATA.daily=[];DATA.attendance=[event('DAY_IN','10:50'),event('BREAK_OUT','15:15'),event('BREAK_IN','16:13'),event('DAY_OUT','21:01')];
+r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.over_minutes,0);assert.equal(r.credited_minutes,0);assert.match(r.issue,/รอคำนวณ/);
+DATA.daily=[{employee_id:emp.id,work_date:date,status:'COMPLETED',required_minutes:540,credited_minutes:611,over_minutes:71,short_minutes:0,net_minutes:71,break_minutes:60}];
+r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.over_minutes,71);assert.equal(r.credited_minutes,611);
+DATA.daily[0].credited_minutes=0;DATA.daily[0].work_minutes=611;DATA.daily[0].over_minutes=0;DATA.daily[0].net_minutes=0;
+r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.credited_minutes,0);assert.equal(r.over_minutes,0);assert.equal(r.net_minutes,0);
+console.log('PASS missing daily summary never turns full workday into OT; actual early arrival and explicit zero values are preserved');

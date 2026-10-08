@@ -12,7 +12,7 @@ const cors = {
   'Access-Control-Allow-Headers':'content-type,x-admin-key',
   'Access-Control-Allow-Methods':'POST,OPTIONS'
 };
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.5'}});
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.7'}});
 const fail=(m:string,s=400)=>json({success:false,message:m},s);
 const now=()=>new Date().toISOString();
 
@@ -122,6 +122,30 @@ if(action==='attendance_review_context'||action==='review_attendance_request'){
 if(action==='review_gps_request'||action==='review_attendance_correction_request')return fail('กรุณาเปิดหน้าใหม่ แล้วตรวจแก้ข้อมูลก่อนอนุมัติ',409);
 if(action==='bootstrap'){
       return json({success:true,data:await listAll()});
+    }
+
+    if(action==='report_data'){
+      const start=String(p.start_date||''),end=String(p.end_date||'');
+      const valid=(v:string)=>/^\d{4}-\d{2}-\d{2}$/.test(v)&&!isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
+      if(!valid(start)||!valid(end)||start>end||(Date.parse(end)-Date.parse(start))/86400000>92)return fail('ช่วงวันที่ไม่ถูกต้อง (ไม่เกิน 93 วัน)');
+      const read=async(table:string,column:string,attendance=false)=>{
+        const rows:any[]=[];
+        // Page below the API row ceiling and never silently truncate a report.
+        for(let from=0;;from+=500){
+          let q=sb.from(table).select(attendance?'*,offices(office_name)':'*')
+            .gte(column,attendance?start+'T00:00:00+07:00':start)
+            .lte(column,attendance?end+'T23:59:59.999999+07:00':end)
+            .order(column).order('id').range(from,from+499);
+          if(attendance)q=q.is('deleted_at',null);
+          const {data,error}=await q;if(error)throw error;
+          rows.push(...(data||[]));if((data||[]).length<500)return rows;
+        }
+      };
+      const [daily,schedules,leaves,attendance]=await Promise.all([
+        read('daily_summaries','work_date'),read('employee_schedules','work_date'),
+        read('leave_requests','leave_date'),read('attendance_events','occurred_at',true)
+      ]);
+      return json({success:true,complete:true,period:{start_date:start,end_date:end},data:{daily,schedules,leaves,attendance}});
     }
 
     if(action==='list_attendance'){
