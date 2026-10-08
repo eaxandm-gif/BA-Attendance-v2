@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BA Attendance Admin</title>
-<!-- Admin report fix 4.6.6: mode-specific work boundaries -->
+<!-- Admin report fix 4.6.7: complete period data and authoritative OT -->
 <script src="admin-config.js?v=2.6.0"></script>
 <script src="attendance-review.js?v=4.6.5"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -47,7 +47,7 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
       <button onclick="refreshAll()">รีเฟรช</button>
       <input id="search" placeholder="ค้นหา..." oninput="render()" style="max-width:300px">
       <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
-      <input id="dailyDate" class="hidden" type="date" onchange="render()" style="max-width:180px">
+      <input id="dailyDate" class="hidden" type="date" onchange="loadSummaryPeriod()" style="max-width:180px">
       <input id="monthlyMonth" class="hidden" type="month" onchange="loadMonthlyMatrixAttendance()" style="max-width:180px">
       <select id="monthlyView" class="hidden" onchange="render()" style="max-width:220px">
         <option value="matrix">ตารางทั้งเดือน (Matrix)</option>
@@ -138,7 +138,7 @@ async function login(){
  }
 }
 function logout(){localStorage.removeItem('ba_admin_key');location.reload()}
-async function refreshAll(){if(current==='attendance_requests')return loadAttendanceRequests();try{const r=await api('refresh');DATA=r.data;render();msg('อัปเดตข้อมูลแล้ว')}catch(e){msg(e.message,true)}}
+async function refreshAll(){if(['daily','monthly'].includes(current))return loadSummaryPeriod();if(current==='attendance_requests')return loadAttendanceRequests();try{const r=await api('refresh');DATA=r.data;render();msg('อัปเดตข้อมูลแล้ว')}catch(e){msg(e.message,true)}}
 async function loadAttendanceHistory(){
  if(current!=='attendance'||attendanceLoading)return;
  const start_date=$('attendanceFrom').value;
@@ -160,25 +160,37 @@ async function loadAttendanceHistory(){
    msg(`โหลด Attendance ย้อนหลังไม่สำเร็จ: ${e.message}`,true);
  }finally{attendanceLoading=false;render()}
 }
-async function loadMonthlyMatrixAttendance(){
- if(current!=='monthly'||monthlyMatrixLoading)return;
- const month=$('monthlyMonth').value;
- if(!month)return;
- monthlyMatrixLoading=true;render();
- try{
-   const end=`${month}-${String(daysInMonth(month)).padStart(2,'0')}`;
-   const result=await api('list_attendance',{start_date:`${month}-01`,end_date:end,limit:10000});
-   const rows=result?.data?.attendance||result?.attendance||result?.data||result?.rows||[];
-   if(!Array.isArray(rows))throw new Error('รูปแบบข้อมูล Attendance ไม่ถูกต้อง');
-   DATA.attendance=rows;
- }catch(e){msg(`โหลด Attendance สำหรับ Matrix ไม่สำเร็จ: ${e.message}`,true)}
- finally{monthlyMatrixLoading=false;render()}
+let reportGeneration=0,reportReady='',reportError='';
+function selectedReportPeriod(){
+ const month=$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7);
+ const day=$('dailyDate').value||bangkokDateKey(new Date());
+ return current==='daily'?{start_date:day,end_date:day}:{start_date:`${month}-01`,end_date:`${month}-${String(daysInMonth(month)).padStart(2,'0')}`};
 }
+function reportKey(){return JSON.stringify(selectedReportPeriod())}
+function reportGuard(){
+ if(reportReady===reportKey()&&!monthlyMatrixLoading)return '';
+ window.__currentSummaryRows=[];
+ return `<div class="status">${esc(reportError||'กำลังโหลดข้อมูลสรุปให้ครบ กรุณารอสักครู่...')}</div>`;
+}
+async function loadSummaryPeriod(){
+ if(!['daily','monthly'].includes(current))return;
+ const generation=++reportGeneration,period=selectedReportPeriod(),key=JSON.stringify(period);
+ reportReady='';reportError='';monthlyMatrixLoading=true;render();
+ try{
+   const result=await api('report_data',period);
+   if(generation!==reportGeneration||key!==reportKey())return;
+   if(result.complete!==true||!['daily','schedules','leaves','attendance'].every(k=>Array.isArray(result.data?.[k])))throw new Error('ข้อมูลสรุปไม่ครบ');
+   Object.assign(DATA,result.data);reportReady=key;
+ }catch(e){if(generation===reportGeneration){reportError=`โหลดสรุปไม่สำเร็จ: ${e.message} กรุณากดรีเฟรช`;msg(reportError,true)}}
+ finally{if(generation===reportGeneration){monthlyMatrixLoading=false;render()}}
+}
+async function loadMonthlyMatrixAttendance(){return loadSummaryPeriod()}
 function buildTabs(){$('tabs').innerHTML=tabs.map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('')}
 function switchTab(id){
+ ++reportGeneration;monthlyMatrixLoading=false;
  current=id;buildTabs();render();
  if(id==='attendance')loadAttendanceHistory();
- if(id==='monthly')loadMonthlyMatrixAttendance();
+ if(id==='monthly'||id==='daily')loadSummaryPeriod();
 }
 function findName(list,id,key='id',label='display_name'){const x=(list||[]).find(v=>v[key]===id);return x?x[label]||x.office_name||x.supervisor_name||x.shift_name:id||'-'}
 function filterRows(rows){const q=$('search').value.trim().toLowerCase();return !q?rows:rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q))}
@@ -272,7 +284,9 @@ function summaryForEmployeeDate(emp,date){
  const workInTypes=new Set(boundary.start),workOutTypes=new Set(boundary.end);
  const firstEventIn=events.find(e=>workInTypes.has(e.event_type))||null;
  const lastEventOut=[...events].reverse().find(e=>workOutTypes.has(e.event_type))||null;
- const shiftId=summary?.shift_id||schedule?.shift_id||emp.default_shift_id||null;
+ const rawShiftId=summary?.shift_id||schedule?.shift_id||emp.default_shift_id||null;
+ const normalizedShiftId=String(rawShiftId||'').replace(/^'([^']+)'::text$/, '$1');
+ const shiftId=(DATA.shifts||[]).some(s=>s.id===normalizedShiftId)?normalizedShiftId:rawShiftId;
  const shift=(DATA.shifts||[]).find(s=>s.id===shiftId)||null;
  const today=bangkokDateKey(new Date());
 
@@ -291,15 +305,13 @@ function summaryForEmployeeDate(emp,date){
  const firstInValue=summary?summary.first_in:(firstEventIn?.occurred_at||null);
  const lastOutValue=summary?summary.last_out:(lastEventOut?.occurred_at||null);
  const fallbackBreak=pairDuration(events,'BREAK_OUT','BREAK_IN');
- const fallbackSpan=firstEventIn&&lastEventOut?Math.max(0,Math.floor((new Date(lastEventOut.occurred_at)-new Date(firstEventIn.occurred_at))/60000)):0;
- const fallbackCredited=Math.max(0,fallbackSpan-fallbackBreak);
  const fallbackRefill=pairDuration(events,'REFILL_IN','REFILL_OUT');
- const required=Number(summary?.required_minutes||schedule?.required_minutes||shift?.required_minutes||0);
- const credited=Number(summary?.credited_minutes||summary?.work_minutes||(summary?0:fallbackCredited));
+ const required=Number(summary?.required_minutes??0);
+ const credited=Number(summary?.credited_minutes??summary?.work_minutes??0);
  const shiftStartMinutes=minutesOfDayFromHHMM(summary?.shift_start||shift?.start_time);
  const fallbackLate=firstEventIn&&shiftStartMinutes!=null?Math.max(0,eventMinutes(firstEventIn)-shiftStartMinutes-Number(shift?.grace_minutes||0)):0;
  const fallbackShort=status==='COMPLETED'&&required>credited?required-credited:0;
- const fallbackOver=status==='COMPLETED'&&credited>required?credited-required:0;
+ const fallbackOver=0; // Missing summaries must never manufacture OT.
 
  return {
    work_date:date,
@@ -315,16 +327,16 @@ function summaryForEmployeeDate(emp,date){
    shift_end:summary?.shift_end?String(summary.shift_end).slice(0,5):(shift?.end_time?String(shift.end_time).slice(0,5):''),
    first_in:firstInValue?bangkokTime(firstInValue):'',
    last_out:lastOutValue?bangkokTime(lastOutValue):'',
-   late_minutes:Number(summary?.late_minutes||(summary?0:fallbackLate)),
+   late_minutes:Number(summary?.late_minutes??(summary?0:fallbackLate)),
    credited_minutes:credited,
-   break_minutes:Number(summary?.break_minutes||(summary?0:fallbackBreak)),
-   refill_minutes:Number(summary?.refill_minutes||(summary?0:fallbackRefill)),
+   break_minutes:Number(summary?.break_minutes??(summary?0:fallbackBreak)),
+   refill_minutes:Number(summary?.refill_minutes??(summary?0:fallbackRefill)),
    required_minutes:required,
-   short_minutes:Number(summary?.short_minutes||(summary?0:fallbackShort)),
-   over_minutes:Number(summary?.over_minutes||(summary?0:fallbackOver)),
-   net_minutes:Number(summary?.net_minutes||(summary?0:(status==='COMPLETED'?credited-required:0))),
+   short_minutes:Number(summary?.short_minutes??(summary?0:fallbackShort)),
+   over_minutes:Number(summary?.over_minutes??(summary?0:fallbackOver)),
+   net_minutes:Number(summary?.net_minutes??0),
    offices,
-   issue:summary?.issue||(!summary&&events.length&&!(firstEventIn&&lastEventOut)?'INCOMPLETE_EVENT':''),
+   issue:summary?.issue||(!summary&&events.length?'รอคำนวณสรุปรายวัน':''),
    has_events:Boolean(summary?.first_in||summary?.last_out||events.length)
  };
 }
@@ -435,6 +447,7 @@ function fmtMinutes(v){
  return `${sign}${Math.floor(a/60)}:${String(a%60).padStart(2,'0')}`;
 }
 function renderDailySummary(){
+ const guard=reportGuard();if(guard){$('content').innerHTML=guard;return;}
  const date=$('dailyDate').value||bangkokDateKey(new Date());
  const q=$('search').value.trim().toLowerCase();
  const rows=buildDailySummary(date).filter(r=>!q||JSON.stringify(r).toLowerCase().includes(q));
@@ -480,6 +493,7 @@ function renderDailySummary(){
  $('content').innerHTML=kpis+body;
 }
 function renderMonthlySummary(){
+ const guard=reportGuard();if(guard){$('content').innerHTML=guard;return;}
  const month=$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7);
  const q=$('search').value.trim().toLowerCase();
  if($('monthlyView').value==='totals')return renderMonthlyTotals(month,q);
@@ -591,6 +605,7 @@ function excelRowsForCurrentSummary(rows){
  }));
 }
 function exportCurrentSummary(){
+ if(reportGuard())return msg('ข้อมูลสรุปยังไม่ครบ กรุณาโหลดใหม่',true);
  const rows=window.__currentSummaryRows||[];
  if(!rows.length)return msg('ไม่มีข้อมูลสำหรับดาวน์โหลด',true);
  const exportEmployee=(DATA.employees||[]).find(e=>e.id===$('monthlyEmployee').value);
@@ -611,7 +626,7 @@ async function recalculateCurrentSummary(){
     ?await api('recalculate_date',{date:$('dailyDate').value||bangkokDateKey(new Date())})
     :await api('recalculate_month',{month:$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7)});
   DATA=result.data||DATA;
-  render();
+  await loadSummaryPeriod();
   msg(result.message||'คำนวณใหม่แล้ว');
  }catch(e){
   const message=e?.message||'คำนวณใหม่ไม่สำเร็จ';
