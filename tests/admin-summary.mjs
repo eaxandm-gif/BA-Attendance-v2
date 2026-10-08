@@ -23,3 +23,12 @@ r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.over_minutes,71);assert.eq
 DATA.daily[0].credited_minutes=0;DATA.daily[0].work_minutes=611;DATA.daily[0].over_minutes=0;DATA.daily[0].net_minutes=0;
 r=ctx.summaryForEmployeeDate(emp,date);assert.equal(r.credited_minutes,0);assert.equal(r.over_minutes,0);assert.equal(r.net_minutes,0);
 console.log('PASS missing daily summary never turns full workday into OT; actual early arrival and explicit zero values are preserved');
+DATA.attendance=[];DATA.schedules=[];DATA.daily=[{employee_id:emp.id,work_date:date,status:'ABSENT',over_minutes:0}];
+for(const leave_type of ['SICK_LEAVE','BUSINESS_LEAVE','VACATION']){
+ DATA.leaves=[{employee_id:emp.id,leave_date:date,status:'APPROVED',leave_type}];assert.equal(ctx.summaryForEmployeeDate(emp,date).status,leave_type);
+ DATA.daily=[];assert.equal(ctx.summaryForEmployeeDate(emp,date).status,leave_type);
+ DATA.daily=[{employee_id:emp.id,work_date:date,status:'ABSENT'}];
+}
+for(const status of ['PENDING','REJECTED']){DATA.leaves=[{employee_id:emp.id,leave_date:date,status,leave_type:'SICK_LEAVE'}];assert.equal(ctx.summaryForEmployeeDate(emp,date).status,'ABSENT');}
+DATA.leaves=[{employee_id:'someone-else',leave_date:date,status:'APPROVED',leave_type:'SICK_LEAVE'}];assert.equal(ctx.summaryForEmployeeDate(emp,date).status,'ABSENT');
+console.log('PASS approved leave overrides stale ABSENT or missing summaries; pending/rejected and other employees do not');
