@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BA Attendance Admin</title>
-<!-- Admin report fix 4.6.7: complete period data and authoritative OT -->
+<!-- Admin report fix 4.6.8: approved leave takes precedence over stale attendance status -->
 <script src="admin-config.js?v=2.6.0"></script>
 <script src="attendance-review.js?v=4.6.5"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -290,7 +290,7 @@ function summaryForEmployeeDate(emp,date){
  const shift=(DATA.shifts||[]).find(s=>s.id===shiftId)||null;
  const today=bangkokDateKey(new Date());
 
- let status=summary?.status||approvedLeave?.leave_type||schedule?.schedule_status||'WORK';
+ let status=approvedLeave?.leave_type||summary?.status||schedule?.schedule_status||'WORK';
  if(!summary&&!approvedLeave&&events.length)status=firstEventIn&&lastEventOut?'COMPLETED':'WORKING';
  if(status==='WORK'){
    if(date<today)status='ABSENT';
@@ -514,6 +514,7 @@ function renderMonthlySummary(){
  const body=table(headers,rows.map(r=>`<tr><td class="emp"><b>${esc(r.employee_code)}</b><br>${esc(r.display_name)}</td>${Array.from({length:total},(_,i)=>`<td><span class="badge">${esc(r[`day_${i+1}`]||'-')}</span></td>`).join('')}<td>${r.WORK}</td><td>${r.OFF}</td><td>${r.SICK}</td><td>${r.HOL}</td><td>${r.INC}</td></tr>`));
  $('content').innerHTML=(monthlyMatrixLoading?'<div class="status">กำลังโหลด Attendance ของเดือนที่เลือก...</div>':'')+kpis+`<div class="muted" style="margin-bottom:8px">WORK = ทำงาน · OFF = หยุด · SICK = ลาป่วย · HOL = ลาอื่น · INC = ข้อมูลลงเวลาไม่ครบ</div>`+body;
 }
+function reportStatusLabel(status){return {SICK_LEAVE:'ลาป่วย',BUSINESS_LEAVE:'ลากิจ',VACATION:'ลาพักร้อน'}[status]||status}
 function renderMonthlyEmployee(month){
  const employeeId=$('monthlyEmployee').value;
  const emp=(DATA.employees||[]).find(e=>e.id===employeeId);
@@ -540,7 +541,7 @@ function renderMonthlyEmployee(month){
  </div>`;
  const title=`<div class="status"><b>${esc(emp.employee_code)} · ${esc(emp.display_name)}</b> · ${esc(emp.supervisors?.supervisor_name||'-')} · ${esc(month)}</div>`;
  const body=table(['วันที่','สถานะ','Shift','Event ลงเวลาทั้งหมด','เข้า','ออก','เวลาทำงาน','เวลาที่ต้องทำ','พัก','เติมของ','ขาด','OT','สาขา','ปัญหา'],rows.map(r=>`<tr>
-  <td>${esc(r.work_date)}</td><td>${esc(r.status)}</td><td>${esc(r.shift_name||r.shift_id||'-')}</td><td style="min-width:260px">${esc(r.event_timeline||'-')}</td>
+  <td>${esc(r.work_date)}</td><td>${esc(reportStatusLabel(r.status))}</td><td>${esc(r.shift_name||r.shift_id||'-')}</td><td style="min-width:260px">${esc(r.event_timeline||'-')}</td>
   <td>${esc(r.first_in||'-')}</td><td>${esc(r.last_out||'-')}</td><td>${fmtMinutes(r.credited_minutes)}</td><td>${fmtMinutes(r.required_minutes)}</td>
   <td>${fmtMinutes(r.break_minutes)}</td><td>${fmtMinutes(r.refill_minutes)}</td><td class="${r.short_minutes>0?'late':''}">${fmtMinutes(r.short_minutes)}</td>
   <td class="${r.over_minutes>0?'ontime':''}">${r.over_minutes>0?fmtMinutes(r.over_minutes):'-'}</td><td>${esc(r.offices||'-')}</td><td>${esc(r.issue||'-')}</td></tr>`));
@@ -579,7 +580,7 @@ function csvEscape(v){
 }
 function excelRowsForCurrentSummary(rows){
  if(current==='monthly'&&$('monthlyView').value==='employee')return rows.map(r=>({
-   'วันที่':r.work_date,'สถานะ':r.status,'Shift':r.shift_name||r.shift_id,'Event ลงเวลาทั้งหมด':r.event_timeline,
+   'วันที่':r.work_date,'สถานะ':reportStatusLabel(r.status),'Shift':r.shift_name||r.shift_id,'Event ลงเวลาทั้งหมด':r.event_timeline,
    'เข้า':r.first_in,'ออก':r.last_out,'นาทีทำงาน':r.credited_minutes,'นาทีที่ต้องทำ':r.required_minutes,
    'นาทีพัก':r.break_minutes,'นาทีเติมของ':r.refill_minutes,'นาทีขาด':r.short_minutes,'OT นาที':r.over_minutes,
    'Net นาที':r.net_minutes,'สาขา':r.offices,'ปัญหา':r.issue
