@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BA Attendance Admin</title>
-<!-- Admin report fix 4.6.8: approved leave takes precedence over stale attendance status -->
+<!-- Admin report fix 4.6.9: isolate report data from admin lists -->
 <script src="admin-config.js?v=2.6.0"></script>
 <script src="attendance-review.js?v=4.6.5"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -160,7 +160,10 @@ async function loadAttendanceHistory(){
    msg(`โหลด Attendance ย้อนหลังไม่สำเร็จ: ${e.message}`,true);
  }finally{attendanceLoading=false;render()}
 }
-let reportGeneration=0,reportReady='',reportError='';
+let reportGeneration=0,reportReady='',reportError='',adminListData=null;
+function restoreAdminListData(){
+ if(adminListData){DATA=adminListData;adminListData=null;}
+}
 function selectedReportPeriod(){
  const month=$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7);
  const day=$('dailyDate').value||bangkokDateKey(new Date());
@@ -174,13 +177,14 @@ function reportGuard(){
 }
 async function loadSummaryPeriod(){
  if(!['daily','monthly'].includes(current))return;
+ if(!adminListData)adminListData=DATA;
  const generation=++reportGeneration,period=selectedReportPeriod(),key=JSON.stringify(period);
  reportReady='';reportError='';monthlyMatrixLoading=true;render();
  try{
    const result=await api('report_data',period);
    if(generation!==reportGeneration||key!==reportKey())return;
    if(result.complete!==true||!['daily','schedules','leaves','attendance'].every(k=>Array.isArray(result.data?.[k])))throw new Error('ข้อมูลสรุปไม่ครบ');
-   Object.assign(DATA,result.data);reportReady=key;
+   DATA={...DATA,...result.data};reportReady=key;
  }catch(e){if(generation===reportGeneration){reportError=`โหลดสรุปไม่สำเร็จ: ${e.message} กรุณากดรีเฟรช`;msg(reportError,true)}}
  finally{if(generation===reportGeneration){monthlyMatrixLoading=false;render()}}
 }
@@ -188,6 +192,7 @@ async function loadMonthlyMatrixAttendance(){return loadSummaryPeriod()}
 function buildTabs(){$('tabs').innerHTML=tabs.map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('')}
 function switchTab(id){
  ++reportGeneration;monthlyMatrixLoading=false;
+ if(!['daily','monthly'].includes(id))restoreAdminListData();
  current=id;buildTabs();render();
  if(id==='attendance')loadAttendanceHistory();
  if(id==='monthly'||id==='daily')loadSummaryPeriod();
@@ -627,6 +632,7 @@ async function recalculateCurrentSummary(){
     ?await api('recalculate_date',{date:$('dailyDate').value||bangkokDateKey(new Date())})
     :await api('recalculate_month',{month:$('monthlyMonth').value||bangkokDateKey(new Date()).slice(0,7)});
   DATA=result.data||DATA;
+  adminListData=DATA;
   await loadSummaryPeriod();
   msg(result.message||'คำนวณใหม่แล้ว');
  }catch(e){
