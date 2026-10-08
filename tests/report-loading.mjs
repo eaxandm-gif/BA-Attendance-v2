@@ -22,3 +22,10 @@ const recalc=ba.slice(ba.indexOf('async function recalc(employeeId:'),ba.indexOf
 let writes=0;const failure=Error('RPC unavailable');const bc=vm.createContext({sb:{rpc:async()=>({error:failure}),from:()=>{writes++;throw Error('unexpected fallback write')}},sync:async()=>{}});
 vm.runInContext(stripTypeScriptTypes(recalc),bc);await assert.rejects(bc.recalc('employee','2026-09-01'),/RPC unavailable/);assert.equal(writes,0);
 console.log('PASS calculation failure cannot overwrite summaries with an alternative formula');
+const original={leaves:[{id:'outside-month',employees:{employee_code:'TEST',display_name:'Employee'},supervisors:{supervisor_name:'Reviewer'}}],schedules:[{id:'schedule'}],attendance:[{id:'event'}]};
+const sc=vm.createContext({DATA:original,current:'monthly',monthlyMatrixLoading:false,$:id=>els[id],bangkokDateKey:()=> '2026-10-08',daysInMonth:()=>30,window:{},esc:x=>x,render:()=>{},msg:()=>{},api:async()=>reply('report')});
+vm.runInContext(html.slice(html.indexOf('let reportGeneration='),html.indexOf('function buildTabs()')),sc);
+await sc.loadSummaryPeriod();assert.notEqual(sc.DATA,original);assert.equal(original.leaves[0].employees.display_name,'Employee');
+sc.restoreAdminListData();assert.equal(sc.DATA,original);assert.equal(sc.DATA.leaves[0].supervisors.supervisor_name,'Reviewer');assert.equal(sc.DATA.leaves[0].id,'outside-month');assert.equal(sc.DATA.schedules[0].id,'schedule');
+await sc.loadSummaryPeriod();sc.restoreAdminListData();assert.equal(sc.DATA,original);
+console.log('PASS report round trips preserve complete admin lists, employee names and reviewer names');
