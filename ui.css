@@ -98,3 +98,10 @@ header{max-width:1200px;margin:24px auto 0;padding:24px 32px;background:var(--ca
  .admin-app .panel>.toolbar #monthlyView{flex-grow:1.4}
  .admin-app .panel>.toolbar button{flex:0 0 auto;white-space:nowrap;padding:10px 12px;font-size:13px}
 }
+
+/* Dense request rows: readable text and side-by-side review actions. */
+.admin-app .attendance-request-table th,.admin-app .attendance-request-table td{font-size:16px;line-height:1.5;padding:10px 12px;vertical-align:middle}
+.admin-app .attendance-request-table [data-column=actions]{width:230px;min-width:230px;max-width:230px;white-space:nowrap}
+.admin-app .attendance-request-table [data-column=actions] button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;min-width:0;padding:5px 10px;margin:0 6px 0 0;font-size:14px;line-height:1.5;border-radius:10px;white-space:nowrap}
+.admin-app .attendance-request-table [data-column=actions] button:last-child{margin:0}
+@media(pointer:coarse){.admin-app .attendance-request-table [data-column=actions] button{min-height:44px}}
