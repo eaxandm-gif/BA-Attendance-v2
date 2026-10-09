@@ -51,3 +51,11 @@ header{max-width:1200px;margin:24px auto 0;padding:24px 32px;background:var(--ca
 .admin-app .tabs{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:8px}
 @media(min-width:721px){.admin-app .app-nav{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:8px}.admin-app .app-nav button{flex:0 0 auto;padding:10px 14px;font-size:14px;white-space:nowrap}.admin-app .app-nav svg{width:20px;height:20px;flex-shrink:0}.admin-app .app-nav .unread-dot{margin-inline:0;flex-shrink:0}}
 @media(max-width:720px){.admin-app>header{padding:16px}.admin-app>.wrap{padding:12px 8px calc(96px + env(safe-area-inset-bottom))}.admin-app .panel{padding:12px;border-radius:16px}}
+
+/* Main and contextual tabs share one horizontal navigation strip. */
+.admin-app .admin-navigation{display:flex;align-items:center;gap:12px;overflow-x:auto;overflow-y:hidden;margin-bottom:20px;padding:4px 0;white-space:nowrap}
+.admin-app .admin-navigation .app-nav,.admin-app .admin-navigation .tabs{display:flex;flex:0 0 auto;flex-wrap:nowrap;overflow:visible;margin:0;padding:0;position:static;width:auto;border:0;background:transparent;gap:6px}
+.admin-app .admin-navigation .tabs{border-left:1px solid var(--line);padding-left:12px}
+.admin-app .admin-navigation button{flex:0 0 auto;white-space:nowrap;padding:10px 12px;font-size:14px;display:inline-flex;flex-direction:row;align-items:center;gap:6px}
+.admin-app .admin-navigation svg{width:20px;height:20px;margin:0}
+@media(max-width:720px){.admin-app>.wrap{padding-bottom:20px}.admin-app .admin-navigation button{font-size:13px}.admin-app .admin-navigation{gap:8px}}
