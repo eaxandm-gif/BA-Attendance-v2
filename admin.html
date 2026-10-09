@@ -9,7 +9,7 @@
 <script src="attendance-review.js?v=4.7.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="ui.css?v=4.7.6">
+<link rel="stylesheet" href="ui.css?v=4.7.7">
 <script src="ui.js?v=4.7.0" defer></script>
 </head>
 <body class="admin-app">
@@ -203,33 +203,7 @@ function tableColumnKind(header){
  if(header==='เวลา'||header==='ประเภท / เวลา')return 'datetime';
  return 'short';
 }
-function wideTable(headers,rows){
- const groups=[['วันที่ / กะ',['วันที่','สถานะ','Shift']],['เวลาทำงาน',['เข้า','ออก','เวลาทำงาน','เวลาที่ต้องทำ']],['พัก / เติมของ',['พัก','เติมของ']],['ขาด / OT',['ขาด','OT']],['สาขา / ปัญหา',['สาขา','ปัญหา']]];
- return `<div class="table-wrap monthly-fit"><table><thead><tr>${groups.map(([label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>{
-  const template=document.createElement('template');template.innerHTML=`<table><tbody>${row}</tbody></table>`;
-  const cells=[...template.content.querySelectorAll('tr:first-child > td')];
-  const field=h=>{const cell=cells[headers.indexOf(h)];return `<div class="report-field"><span>${esc(h)}</span><div class="${esc(cell?.className||'')}">${cell?.innerHTML||'—'}</div></div>`};
-  return `<tr>${groups.map(([label,fields])=>`<td data-label="${label}">${fields.map(field).join('')}</td>`).join('')}</tr><tr class="report-events"><td colspan="5">${field('Event ลงเวลาทั้งหมด')}</td></tr>`;
- }).join('')}</tbody></table></div>`;
-}
-function table(headers,rows){
- const kinds=headers.map(tableColumnKind);
- const preferred=['รหัส','วันที่','เดือน','พนักงาน','ชื่อ','สถานะ','เข้า','ออก','OT','เกิน','ประเภท / เวลา','ประเภท','Event','เวลา','Action','สาขา','BA','WORK','OFF','SICK','HOL','INC'];
- const selected=new Set(preferred.filter(h=>headers.includes(h)).slice(0,6).map(h=>headers.indexOf(h)));
- if(!selected.size)selected.add(0);
- kinds.forEach((kind,i)=>{if(kind==='actions')selected.add(i)});
- const primary=headers.map((_,i)=>i).filter(i=>selected.has(i)),secondary=headers.map((_,i)=>i).filter(i=>!selected.has(i));
- const rendered=rows.map(row=>{
-  const template=document.createElement('template');template.innerHTML=`<table><tbody>${row}</tbody></table>`;
-  const cells=[...template.content.querySelectorAll('tr:first-child > td')];
-  if(!cells.length)return '';
-  const value=i=>cells[i]?.innerHTML||'—';
-  const main=primary.map(i=>`<td data-column="${kinds[i]}" data-label="${esc(headers[i])}"><div class="cell-value ${esc(cells[i]?.className||'')}">${value(i)}</div></td>`).join('');
-  return `<tr>${main}</tr>`+(secondary.length?`<tr class="record-detail"><td colspan="${primary.length}"><dl class="record-fields">${secondary.map(i=>`<div><dt>${esc(headers[i])}</dt><dd>${value(i)}</dd></div>`).join('')}</dl></td></tr>`:'');
- }).join('');
- return `<div class="table-wrap compact-records"><table><thead><tr>${primary.map(i=>`<th>${esc(headers[i])}</th>`).join('')}</tr></thead><tbody>${rendered}</tbody></table></div>`;
-}
-
+function table(headers,rows){const kinds=headers.map(tableColumnKind);return `<div class="table-wrap" tabindex="0" role="region" aria-label="ตารางข้อมูล เลื่อนซ้ายและขวาเพื่อดูทุกคอลัมน์"><table><thead><tr>${headers.map((h,i)=>`<th data-column="${kinds[i]}">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>{let i=0;return row.replace(/<td(?=[\s>])/g,()=>`<td data-column="${kinds[i++]||'short'}"`);}).join('')}</tbody></table></div>`}
 function localDateISO(d){const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
 function renderScheduleOverview(){
@@ -575,7 +549,7 @@ function renderMonthlyEmployee(month){
   <div class="summary-kpi">วันลา<strong>${leave}</strong></div>
  </div>`;
  const title=`<div class="status"><b>${esc(emp.employee_code)} · ${esc(emp.display_name)}</b> · ${esc(emp.supervisors?.supervisor_name||'-')} · ${esc(month)}</div>`;
- const body=wideTable(['วันที่','สถานะ','Shift','Event ลงเวลาทั้งหมด','เข้า','ออก','เวลาทำงาน','เวลาที่ต้องทำ','พัก','เติมของ','ขาด','OT','สาขา','ปัญหา'],rows.map(r=>`<tr>
+ const body=table(['วันที่','สถานะ','Shift','Event ลงเวลาทั้งหมด','เข้า','ออก','เวลาทำงาน','เวลาที่ต้องทำ','พัก','เติมของ','ขาด','OT','สาขา','ปัญหา'],rows.map(r=>`<tr>
   <td>${esc(r.work_date)}</td><td>${esc(reportStatusLabel(r.status))}</td><td>${esc(r.shift_name||r.shift_id||'-')}</td><td style="min-width:260px">${esc(r.event_timeline||'-')}</td>
   <td>${esc(r.first_in||'-')}</td><td>${esc(r.last_out||'-')}</td><td>${fmtMinutes(r.credited_minutes)}</td><td>${fmtMinutes(r.required_minutes)}</td>
   <td>${fmtMinutes(r.break_minutes)}</td><td>${fmtMinutes(r.refill_minutes)}</td><td class="${r.short_minutes>0?'late':''}">${fmtMinutes(r.short_minutes)}</td>
