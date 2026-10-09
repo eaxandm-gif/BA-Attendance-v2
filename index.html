@@ -14,7 +14,7 @@
 
 
 
-<link rel="stylesheet" href="ui.css?v=4.7.12">
+<link rel="stylesheet" href="ui.css?v=4.7.13">
 
 </head>
 <body>
@@ -93,7 +93,7 @@ function showLocationRetryError(message,type){
   if(safari)safari.onclick=()=>openInExternalBrowser();
 }
 function showMonthPicker(title,buttonText,onConfirm){
-  openModal(`<div class="title">${esc(title)}</div>
+  (employeePageSection==='history'?openEmployeeContent:openModal)(`<div class="title">${esc(title)}</div>
     <div class="field"><label>เลือกเดือน</label><input id="monthPicker" type="month" value="${thaiMonth()}"></div>
     <button class="primary full" id="monthPickerBtn">${esc(buttonText)}</button>`);
   $('monthPickerBtn').onclick=()=>onConfirm($('monthPicker').value);
@@ -149,9 +149,37 @@ async function init(){
 }
 
 let homeClockTimer;
+let employeePageSection='home',employeePageGeneration=0;
+function beginEmployeePage(section){
+ if(!$('employeeView')||$('employeeView').classList.contains('hidden'))return;
+ employeePageSection=section;
+ employeePageGeneration++;
+ if(!history.state?.baPage)history.pushState({baPage:true},'');
+}
+function closeEmployeePage(){
+ employeePageGeneration++;
+ if(history.state?.baPage)history.replaceState(null,'');
+ $('employeePage')?.remove();
+ document.querySelector('#employeeView .attendance-layout')?.classList.remove('hidden');
+ employeePageSection='home';updateEmployeeNavigation();window.scrollTo(0,0);
+}
+window.addEventListener('popstate',closeEmployeePage);
+function updateEmployeeNavigation(){
+ document.querySelectorAll('#employeeView>.app-nav button').forEach((b,i)=>{const active=['home','attendance','calendar','leave'][i]===employeePageSection;if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+}
+function openEmployeeContent(html){
+ if(!$('employeeView')||$('employeeView').classList.contains('hidden')){openModal(html);return;}
+ $('modal').classList.remove('show');
+ document.querySelector('#employeeView .attendance-layout')?.classList.add('hidden');
+ let page=$('employeePage');
+ if(!page){page=document.createElement('section');page.id='employeePage';page.className='card employee-page';$('employeeView').appendChild(page);}
+ page.innerHTML=`<button class="page-back" onclick="closeEmployeePage()">‹ กลับหน้าลงเวลา</button><div class="employee-page-body">${html}</div>`;
+ updateEmployeeNavigation();window.scrollTo(0,0);
+}
+function employeePageLoading(title){openEmployeeContent(`<h2>${esc(title)}</h2><p>กรุณารอสักครู่</p>`)}
 function employeeNavigation(){
  if(externalToken)return '';
- return `<nav class="app-nav" aria-label="เมนูพนักงาน"><button aria-current="page" onclick="closeModal();renderEmployeeHome()">${BA_UI.icon('clock')}ลงเวลา</button><button onclick="showShiftRequest('attendance')">${BA_UI.icon('request')}ขอลงเวลา</button><button onclick="showMyShift()">${BA_UI.icon('calendar')}ปฏิทินของฉัน</button><button onclick="showMyLeaves()">${BA_UI.icon('leave')}การลาของฉัน</button></nav>`;
+ return `<nav class="app-nav" aria-label="เมนูพนักงาน"><button aria-current="page" onclick="closeModal();closeEmployeePage();renderEmployeeHome()">${BA_UI.icon('clock')}ลงเวลา</button><button onclick="showShiftRequest('attendance')">${BA_UI.icon('request')}ขอลงเวลา</button><button onclick="showMyShift()">${BA_UI.icon('calendar')}ปฏิทินของฉัน</button><button onclick="showMyLeaves()">${BA_UI.icon('leave')}การลาของฉัน</button></nav>`;
 }
 function paintEmployeeHome(r){
  $('employeeView').classList.remove('hidden');
@@ -166,7 +194,8 @@ async function renderEmployeeHome(){paintEmployeeHome(await BA_API.request('empl
 
 
 function showEmployeeMoreMenu(){
-  openModal(`<div class="title">เมนูเพิ่มเติม</div>
+ beginEmployeePage('more');
+  openEmployeeContent(`<div class="title">เมนูเพิ่มเติม</div>
     <div class="grid">
       <button onclick="showMyHistory()">ประวัติละเอียด</button>
       <button onclick="showMyShift()">Shift ทั้งเดือน</button>
@@ -521,11 +550,13 @@ async function showPendingGpsRequests(){showLoadingModal('กำลังโห�
 async function reviewGpsRequest(id,status){BA_UI.markRead(id);return AttendanceReview.open({kind:'gps',id,decision:status,request:(a,p)=>BA_API.request(a,p),mount:openModal,onDone:showPendingGpsRequests});}
 
 async function showOfficeLocationRequest(){
-  showLoadingModal('กำลังโหลดคำขอออฟฟิศ');
+ beginEmployeePage('more'); const pageGeneration=employeePageGeneration;
+  employeePageLoading('กำลังโหลดคำขอออฟฟิศ');
   try{
     const r=await BA_API.request('employee_office_location_requests');
+    if(pageGeneration!==employeePageGeneration)return;
     const rows=r.rows||[];
-    openModal(`<div class="title">ขอเพิ่มออฟฟิศใหม่</div>
+    openEmployeeContent(`<div class="title">ขอเพิ่มออฟฟิศใหม่</div>
       <div class="item">
         <div>ไปยืนที่ออฟฟิศ/สาขาใหม่ แล้วกดปุ่มด้านล่าง</div>
         <div class="muted">ระบบจะเก็บพิกัด GPS และส่งให้ Supervisor อนุมัติ</div>
@@ -538,7 +569,7 @@ async function showOfficeLocationRequest(){
         <div>Region: ${esc(x.requested_region||'-')}</div>
         <div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div>
       </div>`).join('')||'<div class="item">ยังไม่มีคำขอ</div>'}</div>`);
-  }catch(e){showModalError(e.message)}
+  }catch(e){if(pageGeneration!==employeePageGeneration)return;openEmployeeContent(`<h2>โหลดไม่สำเร็จ</h2><div class="error">${esc(e.message)}</div>`)}
 }
 
 async function captureNewOfficeLocation(){
@@ -575,31 +606,36 @@ async function captureNewOfficeLocation(){
 }
 
 function showMyHistory(){
+ beginEmployeePage('history');
   showMonthPicker('ประวัติของฉัน','ดูประวัติ',async month=>{
     if(!month)return;
-    showLoadingModal('กำลังโหลดประวัติ');
+    employeePageLoading('กำลังโหลดประวัติ');
     try{
       const r=await BA_API.request('employee_history_detail',{month});
-      openModal(`<div class="title">ประวัติของฉัน ${month}</div><div class="list">${r.rows.map(x=>`<div class="item"><div class="row"><b>${esc(x.work_date)}</b><span class="badge">${esc(x.shift_name||'-')}</span></div><div>เข้า ${esc(x.first_in_time||'-')} · ออก ${esc(x.last_out_time||'-')} · เกิน ${hm(x.over_minutes)}</div><div>ทำงาน ${hm(x.credited_minutes)} · พัก ${hm(x.break_minutes)} · ขาด ${hm(x.short_minutes)}</div>${x.missing_summary?'<div class="muted">ไม่มี Summary ของวันนี้ ระบบเติมวันให้ครบเดือนในหน้าประวัติ</div>':''}<div class="timeline">${x.events.map(e=>`<div>${esc(e.time)} — ${esc(e.label)}${e.office_name?' @ '+esc(e.office_name):''}</div>`).join('')||'<span class="muted">ไม่มีรายการกดเวลา</span>'}</div></div>`).join('')||'<div class="item">ไม่มีประวัติในเดือนนี้</div>'}</div>`);
-    }catch(e){showModalError(e.message)}
+      openEmployeeContent(`<div class="title">ประวัติของฉัน ${month}</div><div class="list">${r.rows.map(x=>`<div class="item"><div class="row"><b>${esc(x.work_date)}</b><span class="badge">${esc(x.shift_name||'-')}</span></div><div>เข้า ${esc(x.first_in_time||'-')} · ออก ${esc(x.last_out_time||'-')} · เกิน ${hm(x.over_minutes)}</div><div>ทำงาน ${hm(x.credited_minutes)} · พัก ${hm(x.break_minutes)} · ขาด ${hm(x.short_minutes)}</div>${x.missing_summary?'<div class="muted">ไม่มี Summary ของวันนี้ ระบบเติมวันให้ครบเดือนในหน้าประวัติ</div>':''}<div class="timeline">${x.events.map(e=>`<div>${esc(e.time)} — ${esc(e.label)}${e.office_name?' @ '+esc(e.office_name):''}</div>`).join('')||'<span class="muted">ไม่มีรายการกดเวลา</span>'}</div></div>`).join('')||'<div class="item">ไม่มีประวัติในเดือนนี้</div>'}</div>`);
+    }catch(e){openEmployeeContent(`<h2>โหลดไม่สำเร็จ</h2><div class="error">${esc(e.message)}</div>`)}
   });
 }
 async function showMyProfile(){
-  showLoadingModal('กำลังโหลดข้อมูลส่วนตัว');
+ beginEmployeePage('profile'); const pageGeneration=employeePageGeneration;
+  employeePageLoading('กำลังโหลดข้อมูลส่วนตัว');
   try{
     const r=await BA_API.request('employee_profile');
+    if(pageGeneration!==employeePageGeneration)return;
     const e=r.employee;
-    openModal(`<div class="title">ข้อมูลส่วนตัว</div><div class="field"><label>รหัส</label><input value="${esc(e.employee_code)}" disabled></div><div class="field"><label>ชื่อ</label><input id="myName" value="${esc(e.display_name)}"></div><div class="field"><label>เบอร์โทร</label><input id="myPhone" value="${esc(e.phone||'')}"></div><div class="muted">ประเภท BA: ${esc(e.ba_mode||'-')} · สาขา: ${esc(e.office_name||'-')}</div><button class="primary full" style="margin-top:12px" onclick="saveMyProfile()">บันทึก</button>`);
-  }catch(e){showModalError(e.message)}
+    openEmployeeContent(`<div class="title">ข้อมูลส่วนตัว</div><div class="field"><label>รหัส</label><input value="${esc(e.employee_code)}" disabled></div><div class="field"><label>ชื่อ</label><input id="myName" value="${esc(e.display_name)}"></div><div class="field"><label>เบอร์โทร</label><input id="myPhone" value="${esc(e.phone||'')}"></div><div class="muted">ประเภท BA: ${esc(e.ba_mode||'-')} · สาขา: ${esc(e.office_name||'-')}</div><button class="primary full" style="margin-top:12px" onclick="saveMyProfile()">บันทึก</button>`);
+  }catch(e){if(pageGeneration!==employeePageGeneration)return;openEmployeeContent(`<h2>โหลดไม่สำเร็จ</h2><div class="error">${esc(e.message)}</div>`)}
 }
 async function saveMyProfile(){try{await BA_API.request('update_my_profile',{display_name:$('myName').value,phone:$('myPhone').value});closeModal();alert('บันทึกแล้ว');location.reload()}catch(e){alert(e.message)}}
 let myShiftMonth=thaiMonth();
 function addMonth(month,delta){const [y,m]=month.split('-').map(Number);const d=new Date(y,m-1+delta,1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 async function showMyShift(month=myShiftMonth){
+ beginEmployeePage('calendar'); const pageGeneration=employeePageGeneration;
   myShiftMonth=month;
-  showLoadingModal('กำลังโหลด Shift');
+  employeePageLoading('กำลังโหลด Shift');
   try{
     const r=await BA_API.request('employee_shift_month',{month});
+    if(pageGeneration!==employeePageGeneration)return;
     const weekdays=['จ.','อ.','พ.','พฤ.','ศ.','ส.','อา.'];
     const cells=[];
     const first=new Date(`${month}-01T00:00:00`);
@@ -612,24 +648,29 @@ async function showMyShift(month=myShiftMonth){
         : (x.status==='OFF'?'หยุด':esc(BA_UI.label(x.status)));
       cells.push(`<button type="button" onclick="showMyDay('${x.date}')" class="day ${x.status==='WORK'?'work':x.status==='OFF'?'off':'leave'}"><b>${Number(x.date.slice(-2))}</b><br>${text}</button>`);
     });
-    openModal(`<div class="month-nav"><button onclick="showMyShift('${addMonth(month,-1)}')">‹ เดือนก่อน</button><div class="title" style="margin:0">${month}</div><button onclick="showMyShift('${addMonth(month,1)}')">เดือนถัดไป ›</button></div><div class="day-grid">${weekdays.map(x=>`<div class="weekday">${x}</div>`).join('')}${cells.join('')}</div><div class="muted" style="margin-top:10px">แตะวันที่เพื่อดูรายละเอียด</div>`);$('modal').classList.add('calendar-mode');
-  }catch(e){showModalError(e.message)}
+    openEmployeeContent(`<div class="month-nav"><button onclick="showMyShift('${addMonth(month,-1)}')">‹ เดือนก่อน</button><div class="title" style="margin:0">${month}</div><button onclick="showMyShift('${addMonth(month,1)}')">เดือนถัดไป ›</button></div><div class="day-grid">${weekdays.map(x=>`<div class="weekday">${x}</div>`).join('')}${cells.join('')}</div><div class="muted" style="margin-top:10px">แตะวันที่เพื่อดูรายละเอียด</div>`);
+  }catch(e){if(pageGeneration!==employeePageGeneration)return;openEmployeeContent(`<h2>โหลดไม่สำเร็จ</h2><div class="error">${esc(e.message)}</div>`)}
 }
-async function showMyDay(date){showLoadingModal('กำลังโหลดรายละเอียดวัน');try{const r=await BA_API.request('employee_history_detail',{month:date.slice(0,7)}),day=r.rows.find(x=>x.work_date===date);openModal(`<h2>${esc(date)}</h2><p>กะ: ${esc(day?.shift_name||'ยังไม่ระบุกะ')}</p><p>${date>thaiDate()?'ตารางงานล่วงหน้า':day?.events?.length?'รายการลงเวลา':'ยังไม่มีการลงเวลา'}</p><div class="timeline">${(day?.events||[]).map(e=>`<div>${esc(e.time)} · ${esc(e.label)} · ${esc(e.office_name||'')}</div>`).join('')}</div><div class="actions"><button onclick="showMyShift('${date.slice(0,7)}')">กลับปฏิทิน</button></div>`);}catch(e){showModalError(e.message)}}
+async function showMyDay(date){
+ beginEmployeePage('calendar');employeePageLoading('กำลังโหลดรายละเอียดวัน');try{const r=await BA_API.request('employee_history_detail',{month:date.slice(0,7)}),day=r.rows.find(x=>x.work_date===date);openEmployeeContent(`<h2>${esc(date)}</h2><p>กะ: ${esc(day?.shift_name||'ยังไม่ระบุกะ')}</p><p>${date>thaiDate()?'ตารางงานล่วงหน้า':day?.events?.length?'รายการลงเวลา':'ยังไม่มีการลงเวลา'}</p><div class="timeline">${(day?.events||[]).map(e=>`<div>${esc(e.time)} · ${esc(e.label)} · ${esc(e.office_name||'')}</div>`).join('')}</div><div class="actions"><button onclick="showMyShift('${date.slice(0,7)}')">กลับปฏิทิน</button></div>`);}catch(e){openEmployeeContent(`<h2>โหลดไม่สำเร็จ</h2><div class="error">${esc(e.message)}</div>`)}}
 async function showMyLeaves(){
-  showLoadingModal('กำลังโหลดสถานะการลา');
+ beginEmployeePage('leave'); const pageGeneration=employeePageGeneration;
+  employeePageLoading('กำลังโหลดสถานะการลา');
   try{
     const r=await BA_API.request('my_leave_history');
-    openModal(`<div class="row"><div class="title">การลาของฉัน</div><button class="primary" onclick="showLeaveForm()">ยื่นคำขอลา</button></div><div class="muted" style="margin-bottom:10px">ระบบจะแสดงรายการจนถึง 3 วันหลังวันลา</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.leave_date)} · ${esc(BA_UI.label(x.leave_type))}</b><div>สถานะ: ${esc(BA_UI.label(x.status))}</div><div>เหตุผลของฉัน: ${esc(x.reason||'-')}</div><div>เหตุผล/หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีรายการลาที่อยู่ในช่วงแสดงผล</div>'}</div>`);
-  }catch(e){showModalError(e.message)}
+    if(pageGeneration!==employeePageGeneration)return;
+    openEmployeeContent(`<div class="row"><div class="title">การลาของฉัน</div><button class="primary" onclick="showLeaveForm()">ยื่นคำขอลา</button></div><div class="muted" style="margin-bottom:10px">ระบบจะแสดงรายการจนถึง 3 วันหลังวันลา</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.leave_date)} · ${esc(BA_UI.label(x.leave_type))}</b><div>สถานะ: ${esc(BA_UI.label(x.status))}</div><div>เหตุผลของฉัน: ${esc(x.reason||'-')}</div><div>เหตุผล/หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีรายการลาที่อยู่ในช่วงแสดงผล</div>'}</div>`);
+  }catch(e){if(pageGeneration!==employeePageGeneration)return;openEmployeeContent(`<h2>โหลดไม่สำเร็จ</h2><div class="error">${esc(e.message)}</div>`)}
 }
 
 function ownAttendanceRequests(rows){return `<div class="list">${rows.map(x=>`<div class="item"><b>${esc(x.request_date)} · ${esc(AttendanceReview.names[x.request_side]||x.request_side)}</b><div>สาขา: ${esc(x.offices?.office_name||'ยังไม่ระบุ')}</div><span class="badge">${esc(BA_UI.label(x.status))}</span><div>เหตุผล: ${esc(x.reason||'-')}</div><div>หมายเหตุหัวหน้างาน: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<p class="muted">ไม่มีรายการในช่วงที่แสดง</p>'}</div>`;}
 async function showShiftRequest(view='all'){
-  showLoadingModal('กำลังโหลดการจัด Shift และวันหยุด');
+ beginEmployeePage('attendance'); const pageGeneration=employeePageGeneration;
+  employeePageLoading('กำลังโหลดการจัด Shift และวันหยุด');
   try{
     const r=await BA_API.request('shift_request_setup');
-    openModal(`<div class="title">${view==='attendance'?'ขอลงเวลา':'จัดวันหยุด / ขอเปลี่ยนกะ'}</div>
+    if(pageGeneration!==employeePageGeneration)return;
+    openEmployeeContent(`<div class="title">${view==='attendance'?'ขอลงเวลา':'จัดวันหยุด / ขอเปลี่ยนกะ'}</div>
 
       <div class="item" ${view==='attendance'?'hidden':''}>
         <b>กำหนดวันหยุดหรือกลับเป็นวันทำงาน</b>
@@ -671,7 +712,7 @@ async function showShiftRequest(view='all'){
 
       <div ${view==='attendance'?'hidden':''}><div class="title" style="margin-top:16px">คำขอเปลี่ยนกะที่กำลังดำเนินการ</div>
       <div class="list">${r.requests.filter(x=>x.request_type==='SHIFT_CHANGE').map(x=>`<div class="item"><b>${esc(x.request_date)}</b><div>ขอเปลี่ยน Shift เป็น ${esc(x.requested_shift_id||'-')}</div><div>สถานะ: ${esc(BA_UI.label(x.status))}</div><div>เหตุผล: ${esc(x.reason)}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอเปลี่ยนกะที่กำลังดำเนินการ</div>'}</div></div>`);
-  }catch(e){showModalError(e.message)}
+  }catch(e){if(pageGeneration!==employeePageGeneration)return;openEmployeeContent(`<h2>โหลดไม่สำเร็จ</h2><div class="error">${esc(e.message)}</div>`)}
 }
 
 async function saveMyDayStatus(){
@@ -713,11 +754,12 @@ async function submitAttendanceCorrectionRequest(){
   if(attendanceCorrectionRetry?.signature!==signature)attendanceCorrectionRetry={signature,key:crypto.randomUUID()};
   attendanceCorrectionBusy=true;$('arSubmit').disabled=true;
   await BA_API.request('submit_attendance_correction_request',{...payload,request_key:attendanceCorrectionRetry.key});
-  attendanceCorrectionRetry=null;alert('ส่งคำขอแล้ว รอผู้ดูแลตรวจสอบและอนุมัติ');await showShiftRequest();
+  attendanceCorrectionRetry=null;alert('ส่งคำขอแล้ว รอผู้ดูแลตรวจสอบและอนุมัติ');await showShiftRequest('attendance');
  }catch(e){alert(e.message)}finally{attendanceCorrectionBusy=false;if($('arSubmit'))$('arSubmit').disabled=false;}
 }
-function showLeaveForm(){openModal(`<div class="title">ยื่นคำขอลา</div><div class="field"><label>วันที่</label><input id="lvDate" type="date"></div><div class="field"><label>ประเภท</label><select id="lvType"><option value="SICK_LEAVE">ลาป่วย</option><option value="BUSINESS_LEAVE">ลากิจ</option><option value="VACATION">ลาพักร้อน</option></select></div><div class="field"><label>เหตุผล</label><textarea id="lvReason"></textarea></div><button class="primary full" onclick="submitLeave()">ส่งคำขอ</button>`)}
-async function submitLeave(){try{await BA_API.request('submit_leave',{leave_date:$('lvDate').value,leave_type:$('lvType').value,reason:$('lvReason').value});closeModal();alert('ส่งคำขอแล้ว')}catch(e){alert(e.message)}}
+function showLeaveForm(){
+ beginEmployeePage('leave');openEmployeeContent(`<div class="title">ยื่นคำขอลา</div><div class="field"><label>วันที่</label><input id="lvDate" type="date"></div><div class="field"><label>ประเภท</label><select id="lvType"><option value="SICK_LEAVE">ลาป่วย</option><option value="BUSINESS_LEAVE">ลากิจ</option><option value="VACATION">ลาพักร้อน</option></select></div><div class="field"><label>เหตุผล</label><textarea id="lvReason"></textarea></div><button class="primary full" onclick="submitLeave()">ส่งคำขอ</button>`)}
+async function submitLeave(){try{await BA_API.request('submit_leave',{leave_date:$('lvDate').value,leave_type:$('lvType').value,reason:$('lvReason').value});closeModal();showMyLeaves();alert('ส่งคำขอแล้ว')}catch(e){alert(e.message)}}
 async function renderSupervisorHome(){
   $('supervisorView').classList.remove('hidden');
 

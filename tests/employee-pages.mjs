@@ -1,0 +1,12 @@
+import {JSDOM} from 'jsdom';import fs from 'node:fs';import assert from 'node:assert/strict';
+const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const d=new JSDOM(html,{runScripts:'outside-only',url:'https://example.test'}),w=d.window;
+w.scrollTo=()=>{};w.BA_UI={icon:()=>'',label:x=>x};
+w.eval([...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n').replace("window.addEventListener('load',init)",''));
+w.eval("paintEmployeeHome({state:{label:'IN'},allowed_actions:['BREAK_OUT'],timeline:[]})");
+w.BA_API={request:async()=>({rows:[]})};
+await w.showMyLeaves();assert.ok(w.document.querySelector('#employeePage'));assert.ok(!w.document.querySelector('#modal').classList.contains('show'));assert.match(w.document.querySelector('[aria-current]').textContent,/การลา/);
+w.showLeaveForm();assert.ok(w.document.querySelector('#employeePage #lvDate'));w.closeEmployeePage();assert.ok(!w.document.querySelector('#employeePage'));assert.ok(!w.document.querySelector('.attendance-layout').classList.contains('hidden'));
+let resolve;w.BA_API.request=()=>new Promise(r=>{resolve=r});const loading=w.showMyLeaves();w.closeEmployeePage();resolve({rows:[]});await loading;assert.ok(!w.document.querySelector('#employeePage'),'late response must not reopen exited page');
+w.document.querySelector('#employeeView').classList.add('hidden');w.openEmployeeContent('<h2>Supervisor</h2>');assert.ok(w.document.querySelector('#modal').classList.contains('show'),'supervisor retains modal flow');
+d.window.close();console.log('PASS employee pages, active navigation, back, stale response and supervisor isolation');
