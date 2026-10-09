@@ -43,3 +43,11 @@ header{max-width:1200px;margin:24px auto 0;padding:24px 32px;background:var(--ca
 .table-hint{margin:0 0 8px;color:var(--muted);font-size:13px}.grid>*,.field{min-width:0}.table-wrap td[data-column=status]{white-space:normal;max-width:240px}.table-wrap [data-column=day]{min-width:64px;padding:10px 8px;text-align:center}.table-wrap .schedule-grid th,.table-wrap .schedule-grid td{min-width:54px;padding:8px 6px}.table-wrap .schedule-grid .emp{min-width:190px;max-width:260px;white-space:normal}.table-wrap [data-column=actions] button:last-child{margin-right:0}@media(min-width:721px){.table-wrap td[data-column=actions],.table-wrap th[data-column=actions]{position:sticky;right:0;z-index:2;background:var(--card);box-shadow:-4px 0 8px #332b3508}.table-wrap th[data-column=actions]{background:var(--table-head);z-index:3}}
 .table-wrap [data-column=actions]{width:200px;min-width:200px;max-width:240px;white-space:normal}.table-wrap [data-column=actions] button{margin-bottom:6px}label[for=requestStatusFilter]{display:block;margin-top:16px}
 .tabs{flex-wrap:wrap;overflow:visible}@media(max-width:720px){.admin-app .toolbar select,.admin-app .toolbar input[type=date],.admin-app .toolbar input[type=month]{grid-column:1/-1}}
+
+/* Admin workspace uses the available screen; navigation stays on one row. */
+.admin-app>header{max-width:none;width:100%;margin:0;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:20px 24px}
+.admin-app>.wrap{max-width:none;width:100%;margin:0;padding:16px;border:0;border-radius:0}
+.admin-app .panel{padding:16px;border-radius:20px}
+.admin-app .tabs{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:8px}
+@media(min-width:721px){.admin-app .app-nav{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;gap:8px}.admin-app .app-nav button{flex:0 0 auto;padding:10px 14px;font-size:14px;white-space:nowrap}.admin-app .app-nav svg{width:20px;height:20px;flex-shrink:0}.admin-app .app-nav .unread-dot{margin-inline:0;flex-shrink:0}}
+@media(max-width:720px){.admin-app>header{padding:16px}.admin-app>.wrap{padding:12px 8px calc(96px + env(safe-area-inset-bottom))}.admin-app .panel{padding:12px;border-radius:16px}}
