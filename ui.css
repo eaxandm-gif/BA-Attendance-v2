@@ -85,14 +85,7 @@ header{max-width:1200px;margin:24px auto 0;padding:24px 32px;background:var(--ca
 .admin-app .table-wrap [data-column=status]{min-width:110px}
 .admin-app .table-wrap [data-column=date]{min-width:110px}
 
-/* Keep the individual monthly report as one complete row per day, fitted to its panel. */
-.admin-app .monthly-employee-table{overflow:visible;scrollbar-gutter:auto}
-.admin-app .monthly-employee-table table{min-width:0;width:100%;table-layout:fixed}
-.admin-app .monthly-employee-table th,.admin-app .monthly-employee-table td{min-width:0;max-width:none;width:4.8%;padding:10px 3px;font-size:clamp(11px,.9vw,14px);white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.6}
-.admin-app .monthly-employee-table th:nth-child(1),.admin-app .monthly-employee-table td:nth-child(1){width:8%}
-.admin-app .monthly-employee-table th:nth-child(2),.admin-app .monthly-employee-table td:nth-child(2){width:8%}
-.admin-app .monthly-employee-table th:nth-child(3),.admin-app .monthly-employee-table td:nth-child(3){width:7%}
-.admin-app .monthly-employee-table th:nth-child(4),.admin-app .monthly-employee-table td:nth-child(4){width:16%;min-width:0!important}
-.admin-app .monthly-employee-table th:nth-child(13),.admin-app .monthly-employee-table td:nth-child(13){width:12%}
-.admin-app .monthly-employee-table th:nth-child(14),.admin-app .monthly-employee-table td:nth-child(14){width:10.6%}
-.admin-app .monthly-employee-table td:nth-child(n+5):nth-child(-n+12){white-space:nowrap;font-variant-numeric:tabular-nums}
+/* Readable report spacing, with an optional full-screen report surface. */
+.monthly-report:fullscreen{background:var(--page);padding:24px;overflow:auto;width:100%;height:100%}
+.report-display-tools{display:flex;justify-content:flex-end;margin:12px 0}
+.admin-app .monthly-employee-table th,.admin-app .monthly-employee-table td{font-size:14px;padding:10px 12px}
