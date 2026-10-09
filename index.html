@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <!-- BA Attendance frontend v4.6.7 ATOMIC_ATTENDANCE_ORDER -->
+  <!-- BA Attendance frontend v4.7.0 ATOMIC_ATTENDANCE_ORDER -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BA Attendance</title>
@@ -9,57 +9,24 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js?v=2.8.0"></script>
 <script src="api.js?v=2.8.0"></script>
-<script src="attendance-review.js?v=4.6.7"></script>
-<style>
-:root{--pink:#db2777;--soft:#fff1f7;--card:#fff;--text:#4a2438;--muted:#8b5f74;--ok:#166534;--warn:#9a3412;--bad:#991b1b}
-*{box-sizing:border-box}body{margin:0;font-family:Arial,"Noto Sans Thai",sans-serif;background:linear-gradient(180deg,#ffe4f0,#fff7fb);color:var(--text)}
-header{padding:24px 18px 38px;background:linear-gradient(135deg,#f9a8d4,#f472b6);color:#fff;text-align:center}.wrap{max-width:620px;margin:-24px auto 40px;padding:0 13px}
-.card{background:#fff;border-radius:22px;padding:16px;box-shadow:0 12px 30px rgba(219,39,119,.14);margin-bottom:13px}.hidden{display:none!important}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-button{border:0;border-radius:15px;padding:13px 10px;font-weight:700;font-size:14px;cursor:pointer;background:#fce7f3;color:#9d174d}
-button.primary{background:var(--pink);color:#fff}button.green{background:#dcfce7;color:var(--ok)}button.orange{background:#ffedd5;color:var(--warn)}button.red{background:#fee2e2;color:var(--bad)}button.full{width:100%}
-.title{font-size:18px;font-weight:800;margin-bottom:10px}.muted{color:var(--muted);font-size:12px}.row{display:flex;justify-content:space-between;gap:8px;align-items:center}.badge{padding:4px 9px;border-radius:999px;background:#fce7f3;font-size:12px}
-.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.kpi{background:#fff7fb;border-radius:15px;padding:12px}.kpi strong{display:block;font-size:22px;color:#be185d}
-.list{display:grid;gap:9px}.item{padding:12px;border-radius:15px;background:#fff7fb;border:1px solid #fbcfe8}.timeline{display:grid;gap:5px;margin-top:8px}.timeline div{font-size:13px}
-.field{margin-bottom:10px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.field input,.field select,.field textarea{width:100%;padding:11px;border:1px solid #fbcfe8;border-radius:12px;background:#fff}
-.modal{position:fixed;inset:0;background:#0006;display:none;align-items:flex-end;z-index:20}.modal.show{display:flex}.sheet{background:#fff;width:100%;max-height:94vh;overflow:auto;border-radius:24px 24px 0 0;padding:18px}
-.day-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.weekday{font-size:12px;font-weight:800;text-align:center;padding:5px}.month-nav{display:flex;gap:6px;align-items:center;justify-content:space-between;margin-bottom:10px}.day.blank{visibility:hidden}.day{padding:8px 3px;border-radius:10px;text-align:center;border:1px solid #fbcfe8;font-size:11px}.day.work{background:#fce7f3}.day.off{background:#f3f4f6}.day.leave{background:#fef3c7}.day.selected{outline:3px solid #db2777}
-.error{color:#991b1b;background:#fee2e2}.status{white-space:pre-line;line-height:1.5}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-@media(max-width:430px){.grid3{grid-template-columns:repeat(2,1fr)}}
-</style>
+<script src="attendance-review.js?v=4.7.0"></script>
 
-<style id="v420-mobile-style">
-/* v4.6.7 mobile cosmetic UI inspired by the reference, using existing pink tone */
-.mobile-shell{min-height:100vh;background:linear-gradient(180deg,#fff7fb 0%,#ffe4f0 100%);padding:18px}
-.mobile-hero{border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 20px 55px rgba(219,39,119,.12);padding:22px;margin-bottom:18px;position:relative;overflow:hidden}
-.mobile-hero:before{content:"";position:absolute;right:-30px;top:-40px;width:140px;height:140px;background:#f9a8d4;border-radius:50%;opacity:.35}
-.mobile-brand{font-size:13px;letter-spacing:.12em;color:#9d174d;text-transform:uppercase}
-.mobile-title{font-size:28px;line-height:1.08;font-weight:800;margin:10px 0;color:#3b2030}
-.mobile-sub{color:#8b5f74;font-size:14px}
-.mobile-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-.mobile-card{border:1px solid #ffd1e7;background:rgba(255,255,255,.9);border-radius:22px;padding:16px;box-shadow:0 10px 30px rgba(219,39,119,.08)}
-.mobile-card b{display:block;margin-bottom:6px}
-.mobile-card strong{font-size:30px;color:#be185d}
-.mobile-actions{display:grid;gap:10px;margin-top:14px}
-.mobile-actions button,.mobile-btn{width:100%;border:0;border-radius:16px;padding:14px 16px;background:#db2777;color:white;font-weight:800}
-.mobile-actions button.soft,.mobile-btn.soft{background:#fff1f7;color:#9d174d}
-.mobile-input{width:100%;border:1px solid #ffd1e7;border-radius:14px;background:#fff;padding:12px 13px;margin:6px 0 10px;color:#4a2438}
-.mobile-select{width:100%;border:1px solid #ffd1e7;border-radius:14px;background:#fff;padding:12px 13px;margin:6px 0 10px;color:#4a2438}
-.mobile-list{display:grid;gap:10px;margin-top:12px}
-.mobile-item{background:white;border:1px solid #ffd1e7;border-radius:18px;padding:14px}
-.mobile-muted{color:#8b5f74;font-size:13px}
-</style>
+
+
+
+<link rel="stylesheet" href="ui.css?v=4.7.0">
 
 </head>
 <body>
-<header><h1 style="margin:0">BA Attendance</h1><div>ลงเวลา · Shift · ประวัติ · รายงานทีม</div></header>
+<header><h1 style="margin:0">BA Attendance</h1></header>
 <main class="wrap">
 <div id="loading" class="card status">กำลังเข้าสู่ระบบ LINE...</div>
 <section id="portal" class="hidden">
-<div class="card"><div class="row"><div><div id="name" class="title"></div><div id="role" class="muted"></div></div><span id="version" class="badge"></span></div></div>
+<div class="card profile-bar"><div class="row"><div><div id="name" class="title"></div><div id="role" class="muted"></div></div><span id="version" class="badge"></span></div></div>
 <div id="employeeView" class="hidden"></div><div id="supervisorView" class="hidden"></div>
 </section></main>
-<div id="modal" class="modal"><div class="sheet"><div id="modalBody"></div><button class="full" onclick="closeModal()">ปิด</button></div></div>
+<div id="modal" class="modal"><div class="sheet"><button class="modal-close" onclick="closeModal()" aria-label="ปิดหน้าต่าง">ปิด</button><div id="modalBody"></div></div></div>
+<script src="ui.js?v=4.7.0"></script>
 <script>
 const $=id=>document.getElementById(id);
 function mobileRoot(){
@@ -98,7 +65,7 @@ const labels={IN:'เข้างาน',OUT:'ออกงาน',BREAK_OUT:'อ
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function hm(m){m=Math.round(Number(m||0));const s=m<0?'-':'';m=Math.abs(m);return `${s}${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`}
 function notice(t,c=''){$('loading').className='card status '+c;$('loading').textContent=t;$('loading').classList.remove('hidden')}
-function openModal(html){$('modalBody').innerHTML=html;$('modal').classList.add('show')}
+function openModal(html){$('modal').classList.remove('calendar-mode');$('modalBody').innerHTML=html;$('modal').classList.add('show')}
 function closeModal(){$('modal').classList.remove('show')}
 function showModalError(message){openModal(`<div class="title">เกิดข้อผิดพลาด</div><div class="item error">${esc(message)}</div>`)}
 
@@ -145,13 +112,13 @@ async function init(){
       return;
     }
     if(externalToken){
-      session=await appRequest('bootstrap');
+      session=await appRequest('bootstrap');BA_UI.setScope('line:'+session.profile.line_user_id);
       if(session.profile.role!=='EMPLOYEE')throw new Error('ลิงก์นี้ใช้สำหรับ BA เท่านั้น');
       $('loading').classList.add('hidden');
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.6.7';
+      $('version').textContent='v4.7.0';
       await renderExternalEmployeeHome();
       return;
     }
@@ -167,8 +134,9 @@ async function init(){
       return;
     }
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
-    $('role').textContent=session.profile.role==='SUPERVISOR'?'Supervisor':'BA';
-    $('version').textContent='v4.6.7';
+    $('role').textContent=session.profile.role==='SUPERVISOR'?'หัวหน้างาน':'BA';
+    if(session.profile.role==='EMPLOYEE'){const button=document.createElement('button');button.className='profile-action';button.setAttribute('aria-label','ข้อมูลของฉัน');if(p?.pictureUrl){const image=document.createElement('img');image.src=p.pictureUrl;image.alt='รูปโปรไฟล์';button.appendChild(image);}else button.textContent='ข้อมูลของฉัน';button.onclick=showMyProfile;document.querySelector('header').appendChild(button);}
+    $('version').textContent='v4.7.0';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -176,77 +144,25 @@ async function init(){
       await renderRegistrationStart(p?.userId);
       return;
     }
-    notice(msg+(p?.userId?`\n\nLINE User ID:\n${p.userId}`:''),'error');
+    notice(msg,'error');const retry=document.createElement('button');retry.textContent='ลองเข้าสู่ระบบใหม่';retry.onclick=()=>location.reload();$('loading').appendChild(retry);
   }
 }
 
-async function renderExternalEmployeeHome(){
-  const r=await appRequest('employee_home');
-  $('employeeView').classList.remove('hidden');
-  const timelineHtml=(r.timeline||[]).map(e=>`<div class="item"><div class="row"><b>${esc(e.time||'-')} · ${esc(e.label||e.type)}</b><span class="badge">${esc(e.office_name||'ไม่ระบุสาขา')}</span></div></div>`).join('')||'<div class="item">วันนี้ยังไม่มีรายการกดเวลา</div>';
-  $('employeeView').innerHTML=`
-    <div class="card">
-      <div class="title">ลงเวลา</div>
-      <div class="muted" style="margin-bottom:10px">ลิงก์นี้ใช้ได้จนถึง 03:00 น. ของวันถัดไป และใช้ได้เฉพาะการลงเวลา</div>
-      <div class="status">สถานะ: ${esc(labels[r.state.label]||r.state.label)}
-สาขาปัจจุบัน: ${esc(r.state.office_name||'-')}
-Shift: ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}</div>
-      ${r.attendance_issue?`<div class="item error">${esc(r.attendance_issue)}</div>`:''}
-      <div class="grid" id="actionGrid"></div>
-    </div>
-    <div class="card">
-      <div class="title">รายการกดเวลาวันนี้</div>
-      <div class="list">${timelineHtml}</div>
-    </div>`;
-  const g=$('actionGrid');
-  r.allowed_actions.forEach(a=>{
-    const b=document.createElement('button');
-    b.className=a.includes('OUT')?'orange':'primary';
-    b.textContent=labels[a]||a;
-    b.onclick=()=>submitAttendance(a);
-    g.appendChild(b);
-  });
+let homeClockTimer;
+function employeeNavigation(){
+ if(externalToken)return '';
+ return `<nav class="app-nav" aria-label="เมนูพนักงาน"><button aria-current="page" onclick="closeModal();renderEmployeeHome()">${BA_UI.icon('clock')}ลงเวลา</button><button onclick="showShiftRequest('attendance')">${BA_UI.icon('request')}ขอลงเวลา</button><button onclick="showMyShift()">${BA_UI.icon('calendar')}ปฏิทินของฉัน</button><button onclick="showMyLeaves()">${BA_UI.icon('leave')}การลาของฉัน</button></nav>`;
 }
-
-async function renderEmployeeHome(){
-  const r=await BA_API.request('employee_home');
-  $('employeeView').classList.remove('hidden');
-  const timelineHtml=(r.timeline||[]).map(e=>`<div class="item"><div class="row"><b>${esc(e.time||'-')} · ${esc(e.label||e.type)}</b><span class="badge">${esc(e.office_name||'ไม่ระบุสาขา')}</span></div></div>`).join('')||'<div class="item">วันนี้ยังไม่มีรายการกดเวลา</div>';
-  $('employeeView').innerHTML=`
-    <div class="card">
-      <div class="title">วันนี้</div>
-      <div class="status">
-        <div><b>สถานะ:</b> ${esc(labels[r.state.label]||r.state.label)}</div>
-        <div><b>สาขาปัจจุบัน:</b> ${esc(r.state.office_name||'-')}</div>
-        <div><b>Shift:</b> ${esc(r.shift?.name||'-')} ${r.shift?.start_time?'('+esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5))+')':''}</div>
-        <div><b>ทำงานสะสม:</b> ${hm(r.summary?.is_working?r.summary?.live_work_minutes:r.summary?.credited_minutes||0)}
-          ${r.summary?.is_on_break?` · <b>กำลังพัก:</b> ${hm(r.summary?.current_break_minutes||0)}`:''}
-        </div>
-        <div><b>พักรวม:</b> ${hm(r.summary?.break_minutes||0)} · <b>เกิน:</b> ${hm(r.summary?.over_minutes||0)} · <b>ขาด:</b> ${hm(r.summary?.short_minutes||0)}</div>
-      </div>
-      ${r.attendance_issue?`<div class="item error">${esc(r.attendance_issue)}</div>`:''}
-      <div class="grid" id="actionGrid"></div>
-    </div>
-    <div class="card">
-      <div class="title">รายการกดเวลาวันนี้</div>
-      <div class="list">${timelineHtml}</div>
-      <div class="item" style="margin-top:10px">
-        <div>เข้างาน ${esc(r.summary?.first_in||'-')} · ออกงาน ${esc(r.summary?.last_out||'-')}</div>
-        <div>ทำงาน ${hm(r.summary?.is_working?r.summary?.live_work_minutes:r.summary?.credited_minutes||0)} · พัก ${hm(r.summary?.break_minutes||0)} · เติมของ ${hm(r.summary?.refill_minutes||0)}</div>
-      </div>
-    </div>
-    <div class="card">
-      <button class="full" onclick="showEmployeeMoreMenu()">เมนูเพิ่มเติม</button>
-    </div>`;
-  const g=$('actionGrid');
-  r.allowed_actions.forEach(a=>{
-    const b=document.createElement('button');
-    b.className=a.includes('OUT')?'orange':'primary';
-    b.textContent=labels[a]||a;
-    b.onclick=()=>submitAttendance(a);
-    g.appendChild(b);
-  });
+function paintEmployeeHome(r){
+ $('employeeView').classList.remove('hidden');
+ const summary=r.summary, duration=value=>value==null?'ยังไม่มีข้อมูล':hm(value), events=r.timeline||[];
+ const times=types=>events.filter(e=>types.includes(e.type||e.event_type)).map(e=>e.time).filter(Boolean).join(', ')||'ยังไม่ลงเวลา';
+ $('employeeView').innerHTML=employeeNavigation()+`<div class="attendance-layout"><section class="card clock-card"><div id="attendanceDate" class="muted"></div><div id="attendanceClock" class="live-clock" aria-label="เวลาปัจจุบัน"></div><div class="badge">${esc(labels[r.state.label]||r.state.label)}</div>${externalToken?'<p class="muted">ลิงก์นี้ใช้ได้เฉพาะลงเวลา จนถึง 03:00 น. ของวันถัดไป</p>':''}${r.attendance_issue?`<p class="item error">${esc(r.attendance_issue)}</p>`:''}<div class="grid" id="actionGrid"></div><p>${esc(r.state.office_name||'ยังไม่ระบุสาขา')}</p><div class="muted">${esc(r.shift?.name||'ยังไม่ระบุกะ')} ${r.shift?.start_time?esc(String(r.shift.start_time).slice(0,5))+'–'+esc(String(r.shift.end_time).slice(0,5)):''}</div></section><section class="card"><h2>สรุปเวลาวันนี้</h2><dl class="summary-details"><div><dt>เข้างาน</dt><dd>${esc(summary?.first_in||times(['IN','WORK_IN','DAY_IN']))}</dd></div><div><dt>ออกงาน</dt><dd>${esc(summary?.last_out||times(['OUT','WORK_OUT','DAY_OUT']))}</dd></div><div><dt>ออกพัก</dt><dd>${esc(times(['BREAK_OUT']))}</dd></div><div><dt>กลับจากพัก</dt><dd>${esc(times(['BREAK_IN']))}</dd></div><div><dt>ทำงาน (ชั่วโมง:นาที)</dt><dd>${duration(summary?.is_working?summary.live_work_minutes:summary?.credited_minutes)}</dd></div><div><dt>พักรวม (ชั่วโมง:นาที)</dt><dd>${duration(summary?.break_minutes)}</dd></div><div><dt>เวลาเกิน (ชั่วโมง:นาที)</dt><dd>${duration(summary?.over_minutes)}</dd></div><div><dt>เวลาขาด (ชั่วโมง:นาที)</dt><dd>${duration(summary?.short_minutes)}</dd></div></dl>${!externalToken?'<div class="actions"><button onclick="showMyHistory()">ประวัติลงเวลา</button><button onclick="showEmployeeMoreMenu()">บริการอื่น ๆ</button></div>':''}</section></div>`;
+ (r.allowed_actions||[]).forEach(a=>{const button=document.createElement('button');button.className='primary';button.innerHTML=BA_UI.icon(a.includes('BREAK')?'coffee':a.includes('OUT')?'exit':'clock')+esc(labels[a]||a);button.onclick=()=>submitAttendance(a);$('actionGrid').appendChild(button);});
+ const tick=()=>{if(!$('attendanceClock'))return;const now=new Date();$('attendanceClock').textContent=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(now);$('attendanceDate').textContent=new Intl.DateTimeFormat('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok',dateStyle:'full'}).format(now);};clearInterval(homeClockTimer);tick();homeClockTimer=setInterval(tick,1000);
 }
+async function renderExternalEmployeeHome(){paintEmployeeHome(await appRequest('employee_home'));}
+async function renderEmployeeHome(){paintEmployeeHome(await BA_API.request('employee_home'));}
 
 
 function showEmployeeMoreMenu(){
@@ -581,8 +497,8 @@ async function showGpsRequest(type){
  try{
  const r=await appRequest('gps_request_setup');
  const pending=(r.requests||[]).find(x=>x.status==='PENDING');
- if(pending){openModal(`<div class="title">มีคำขอรออนุมัติ</div><div class="item">${esc(labels[pending.event_type])} · ${esc(new Date(pending.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}<br>${esc(pending.offices?.office_name)}<br>กรุณาติดต่อหัวหน้างานหรือแอดมิน เมื่ออนุมัติแล้วจึงลงเวลารายการถัดไป</div><button class="primary full" onclick="refreshAttendanceHome();closeModal()">ตรวจสถานะล่าสุด</button>`);return;}
- if(!type){openModal(`<div class="title">คำขอ GPS ของฉัน</div>${(r.requests||[]).map(x=>`<div class="item">${esc(labels[x.event_type])} · ${esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}<br>${esc(x.status)} · ${esc(x.reviewer_note||'')}</div>`).join('')||'<div class="item">ยังไม่มีคำขอ</div>'}`);return;}
+ if(pending){openModal(`<div class="title">มีคำขอรออนุมัติ</div><div class="item">${esc(labels[pending.event_type])} · ${esc(new Date(pending.requested_at).toLocaleString('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok'}))}<br>${esc(pending.offices?.office_name)}<br>กรุณาติดต่อหัวหน้างานหรือแอดมิน เมื่ออนุมัติแล้วจึงลงเวลารายการถัดไป</div><button class="primary full" onclick="refreshAttendanceHome();closeModal()">ตรวจสถานะล่าสุด</button>`);return;}
+ if(!type){openModal(`<div class="title">คำขอ GPS ของฉัน</div>${(r.requests||[]).map(x=>`<div class="item">${esc(labels[x.event_type])} · ${esc(new Date(x.requested_at).toLocaleString('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok'}))}<br>${esc(BA_UI.label(x.status))} · ${esc(x.reviewer_note||'')}</div>`).join('')||'<div class="item">ยังไม่มีคำขอ</div>'}`);return;}
  gpsRequestIntent={type,request_key:crypto.randomUUID()};
  openModal(`<div class="title">ขอ${esc(labels[type]||type)} — GPS ใช้ไม่ได้</div><div class="item">ระบบจะบันทึกเวลาที่ได้รับคำขอนี้ รอหัวหน้างานหรือแอดมินตรวจสอบก่อนนำไปลงเวลา ยังไม่ถือว่าลงเวลาสำเร็จ</div><div class="field"><label>สาขาที่อยู่จริง</label><select id="gpsOffice">${(r.offices||[]).map(o=>`<option value="${esc(o.id)}" ${o.id===(gpsOfficeId||r.assigned_office_id)?'selected':''}>${esc(o.office_name)}</option>`).join('')}</select></div><div class="field"><label>เหตุผล / จุดที่อยู่ในร้าน</label><textarea id="gpsReason" maxlength="1000" placeholder="เช่น อยู่หน้าตู้สินค้า แต่ GPS คลาดเคลื่อน"></textarea></div><button class="primary full" id="sendGpsRequest">ส่งคำขอให้ตรวจสอบ</button>`);
  $('sendGpsRequest').onclick=submitGpsRequest;
@@ -596,14 +512,13 @@ async function submitGpsRequest(){
  const c=lastAttendancePosition&&isFreshPosition(lastAttendancePosition)?lastAttendancePosition.coords:null;
  const result=await appRequest('submit_gps_request',{...gpsRequestIntent,office_id:$('gpsOffice').value,reason,latitude:c?.latitude??null,longitude:c?.longitude??null,accuracy:c?.accuracy??null});
  savePendingAttendance(null);
- openModal(`<div class="title">ส่งคำขอแล้ว</div><div class="item">${esc(labels[result.request.event_type])} · ${esc(new Date(result.request.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}<br>รอหัวหน้างานหรือแอดมินอนุมัติ กรุณาติดต่อผู้อนุมัติก่อนลงเวลารายการถัดไป</div>`);
+ openModal(`<div class="title">ส่งคำขอแล้ว</div><div class="item">${esc(labels[result.request.event_type])} · ${esc(new Date(result.request.requested_at).toLocaleString('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok'}))}<br>รอหัวหน้างานหรือแอดมินอนุมัติ กรุณาติดต่อผู้อนุมัติก่อนลงเวลารายการถัดไป</div>`);
  }catch(e){alert(e.message);btn.disabled=false;}
 }
-async function showPendingGpsRequests(){
- showLoadingModal('กำลังโหลดคำขอ GPS');
- try{const r=await BA_API.request('pending_gps_requests');openModal(`<div class="title">คำขอ GPS รออนุมัติ</div>${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>${esc(labels[x.event_type])} · ${esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}</div><div>${esc(x.offices?.office_name)} · ${esc(x.reason)}</div><div>GPS คลาดเคลื่อน: ${x.accuracy_meters==null?'ไม่มีพิกัด':esc(x.accuracy_meters)+' เมตร'}</div><button onclick="reviewGpsRequest('${x.id}','APPROVED')">อนุมัติ</button><button onclick="reviewGpsRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div>`).join('')||'<div class="item">ไม่มีคำขอ</div>'}`)}catch(e){showModalError(e.message)}
-}
-async function reviewGpsRequest(id,status){return AttendanceReview.open({kind:'gps',id,decision:status,request:(a,p)=>BA_API.request(a,p),mount:openModal,onDone:showPendingGpsRequests});}
+function supervisorRequestTable(rows,kind){return `<div class="table-wrap request-table"><table><thead><tr><th>พนักงาน</th><th>ประเภท / วันที่</th><th>สาขา / เหตุผล</th><th>สถานะ</th><th>ดำเนินการ</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.employees?.employee_code)}<br>${esc(x.employees?.display_name)}</td><td>${esc(AttendanceReview.names[x.event_type||x.request_side]||'คำขอลงเวลา')}<br>${esc(kind==='gps'?new Date(x.requested_at).toLocaleString('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok'}):x.request_date)}</td><td>${esc(x.offices?.office_name||'ยังไม่ระบุสาขา')}<br>เหตุผล: ${esc(x.reason||'ยังไม่ระบุเหตุผล')}</td><td><span class="badge">รออนุมัติ</span></td><td><button class="primary" onclick="${kind==='gps'?'reviewGpsRequest':'reviewAttendanceCorrectionRequest'}('${x.id}','APPROVED')">ตรวจแก้และอนุมัติ</button><button class="red" onclick="${kind==='gps'?'reviewGpsRequest':'reviewAttendanceCorrectionRequest'}('${x.id}','REJECTED')">ปฏิเสธ</button></td></tr>`).join('')||'<tr><td colspan="5">ไม่มีคำขอรออนุมัติ</td></tr>'}</tbody></table></div>`;}
+async function showPendingGpsRequests(){showLoadingModal('กำลังโหลดคำขอ');try{const r=await BA_API.request('pending_gps_requests');openModal('<h2>คำขอเมื่อยืนยันตำแหน่งไม่ได้</h2>'+supervisorRequestTable(r.rows,'gps'));}catch(e){showModalError(e.message)}}
+
+async function reviewGpsRequest(id,status){BA_UI.markRead(id);return AttendanceReview.open({kind:'gps',id,decision:status,request:(a,p)=>BA_API.request(a,p),mount:openModal,onDone:showPendingGpsRequests});}
 
 async function showOfficeLocationRequest(){
   showLoadingModal('กำลังโหลดคำขอออฟฟิศ');
@@ -685,7 +600,7 @@ async function showMyShift(month=myShiftMonth){
   showLoadingModal('กำลังโหลด Shift');
   try{
     const r=await BA_API.request('employee_shift_month',{month});
-    const weekdays=['จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์','อาทิตย์'];
+    const weekdays=['จ.','อ.','พ.','พฤ.','ศ.','ส.','อา.'];
     const cells=[];
     const first=new Date(`${month}-01T00:00:00`);
     let firstDay=first.getDay(); // 0 Sun
@@ -693,28 +608,30 @@ async function showMyShift(month=myShiftMonth){
     for(let i=0;i<mondayIndex;i++)cells.push('<div class="day blank"></div>');
     r.rows.forEach(x=>{
       const text=x.status==='WORK'
-        ? `${esc(x.shift_name||x.shift_id)}<br>${esc(x.start_time||'-')}–${esc(x.end_time||'-')}`
-        : (x.status==='OFF'?'หยุดงาน':esc(x.status));
-      cells.push(`<div class="day ${x.status==='WORK'?'work':x.status==='OFF'?'off':'leave'}"><b>${Number(x.date.slice(-2))}</b><br>${text}</div>`);
+        ? `${esc(String(x.start_time||'').slice(0,5)||'ทำงาน')}`
+        : (x.status==='OFF'?'หยุด':esc(BA_UI.label(x.status)));
+      cells.push(`<button type="button" onclick="showMyDay('${x.date}')" class="day ${x.status==='WORK'?'work':x.status==='OFF'?'off':'leave'}"><b>${Number(x.date.slice(-2))}</b><br>${text}</button>`);
     });
-    openModal(`<div class="month-nav"><button onclick="showMyShift('${addMonth(month,-1)}')">‹ เดือนก่อน</button><div class="title" style="margin:0">Shift ${month}</div><button onclick="showMyShift('${addMonth(month,1)}')">เดือนถัดไป ›</button></div><div class="day-grid">${weekdays.map(x=>`<div class="weekday">${x}</div>`).join('')}${cells.join('')}</div><div class="muted" style="margin-top:10px">แสดงครบวันจันทร์–อาทิตย์ · สามารถดูเดือนถัดไปได้จากปุ่มด้านบน</div>`);
+    openModal(`<div class="month-nav"><button onclick="showMyShift('${addMonth(month,-1)}')">‹ เดือนก่อน</button><div class="title" style="margin:0">${month}</div><button onclick="showMyShift('${addMonth(month,1)}')">เดือนถัดไป ›</button></div><div class="day-grid">${weekdays.map(x=>`<div class="weekday">${x}</div>`).join('')}${cells.join('')}</div><div class="muted" style="margin-top:10px">แตะวันที่เพื่อดูรายละเอียด</div>`);$('modal').classList.add('calendar-mode');
   }catch(e){showModalError(e.message)}
 }
+async function showMyDay(date){showLoadingModal('กำลังโหลดรายละเอียดวัน');try{const r=await BA_API.request('employee_history_detail',{month:date.slice(0,7)}),day=r.rows.find(x=>x.work_date===date);openModal(`<h2>${esc(date)}</h2><p>กะ: ${esc(day?.shift_name||'ยังไม่ระบุกะ')}</p><p>${date>thaiDate()?'ตารางงานล่วงหน้า':day?.events?.length?'รายการลงเวลา':'ยังไม่มีการลงเวลา'}</p><div class="timeline">${(day?.events||[]).map(e=>`<div>${esc(e.time)} · ${esc(e.label)} · ${esc(e.office_name||'')}</div>`).join('')}</div><div class="actions"><button onclick="showMyShift('${date.slice(0,7)}')">กลับปฏิทิน</button></div>`);}catch(e){showModalError(e.message)}}
 async function showMyLeaves(){
   showLoadingModal('กำลังโหลดสถานะการลา');
   try{
     const r=await BA_API.request('my_leave_history');
-    openModal(`<div class="title">สถานะการลา</div><div class="muted" style="margin-bottom:10px">ระบบจะแสดงรายการจนถึง 3 วันหลังวันลา</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.leave_date)} · ${esc(x.leave_type)}</b><div>สถานะ: ${esc(x.status)}</div><div>เหตุผลของฉัน: ${esc(x.reason||'-')}</div><div>เหตุผล/หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีรายการลาที่อยู่ในช่วงแสดงผล</div>'}</div>`);
+    openModal(`<div class="row"><div class="title">การลาของฉัน</div><button class="primary" onclick="showLeaveForm()">ยื่นคำขอลา</button></div><div class="muted" style="margin-bottom:10px">ระบบจะแสดงรายการจนถึง 3 วันหลังวันลา</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.leave_date)} · ${esc(BA_UI.label(x.leave_type))}</b><div>สถานะ: ${esc(BA_UI.label(x.status))}</div><div>เหตุผลของฉัน: ${esc(x.reason||'-')}</div><div>เหตุผล/หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีรายการลาที่อยู่ในช่วงแสดงผล</div>'}</div>`);
   }catch(e){showModalError(e.message)}
 }
 
-async function showShiftRequest(){
+function ownAttendanceRequests(rows){return `<div class="list">${rows.map(x=>`<div class="item"><b>${esc(x.request_date)} · ${esc(AttendanceReview.names[x.request_side]||x.request_side)}</b><div>สาขา: ${esc(x.offices?.office_name||'ยังไม่ระบุ')}</div><span class="badge">${esc(BA_UI.label(x.status))}</span><div>เหตุผล: ${esc(x.reason||'-')}</div><div>หมายเหตุหัวหน้างาน: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<p class="muted">ไม่มีรายการในช่วงที่แสดง</p>'}</div>`;}
+async function showShiftRequest(view='all'){
   showLoadingModal('กำลังโหลดการจัด Shift และวันหยุด');
   try{
     const r=await BA_API.request('shift_request_setup');
-    openModal(`<div class="title">จัดวันหยุด / ขอเปลี่ยน Shift</div>
+    openModal(`<div class="title">${view==='attendance'?'ขอลงเวลา':'จัดวันหยุด / ขอเปลี่ยนกะ'}</div>
 
-      <div class="item">
+      <div class="item" ${view==='attendance'?'hidden':''}>
         <b>กำหนดวันหยุดหรือกลับเป็นวันทำงาน</b>
         <div class="muted" style="margin:6px 0 10px">BA เปลี่ยนได้เอง ไม่ต้องรอ Supervisor อนุมัติ</div>
         <div class="field"><label>วันที่</label><input id="dayStatusDate" type="date" min="${thaiDate()}"></div>
@@ -731,7 +648,7 @@ async function showShiftRequest(){
         <button class="primary full" onclick="saveMyDayStatus()">บันทึกวันหยุด/วันทำงาน</button>
       </div>
 
-      <div class="item" style="margin-top:12px">
+      <div class="item" style="margin-top:12px" ${view==='attendance'?'hidden':''}>
         <b>ขอเปลี่ยน Shift</b>
         <div class="muted" style="margin:6px 0 10px">รายการนี้ต้องรอ Supervisor อนุมัติ</div>
         <div class="field"><label>วันที่</label><input id="srDate" type="date" min="${thaiDate()}"></div>
@@ -749,12 +666,11 @@ async function showShiftRequest(){
         <div class="field"><label>เหตุผล</label><textarea id="arReason" placeholder="เช่น ลืมกดออกงานและกลับถึงบ้านแล้ว"></textarea></div>
         <button id="arSubmit" class="primary full" onclick="submitAttendanceCorrectionRequest()">ส่งคำขอลงเวลา</button>
       </div>
-      <div class="title" style="margin-top:16px">สถานะคำขอลงเวลา</div>
-      <div class="muted" style="margin-bottom:8px">แสดงเฉพาะคำขอในช่วง 3 วันที่ผ่านมา คำขอที่รอเกิน 3 วันจะถูกปฏิเสธอัตโนมัติ</div>
-      <div class="list">${(r.attendance_requests||[]).map(x=>`<div class="item"><b>${esc(x.request_date)} · ลืมลง${esc(AttendanceReview.names[x.request_side]||x.request_side)}</b><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลาในช่วง 3 วันที่ผ่านมา</div>'}</div>
+      <h3>คำขอรออนุมัติ</h3>${ownAttendanceRequests((r.attendance_requests||[]).filter(x=>x.status==='PENDING'))}
+      <details><summary>ประวัติคำขอในช่วง 3 วันที่ผ่านมา</summary>${ownAttendanceRequests((r.attendance_requests||[]).filter(x=>x.status!=='PENDING'))}</details>
 
-      <div class="title" style="margin-top:16px">คำขอเปลี่ยน Shift ที่กำลังดำเนินการ</div>
-      <div class="list">${r.requests.filter(x=>x.request_type==='SHIFT_CHANGE').map(x=>`<div class="item"><b>${esc(x.request_date)}</b><div>ขอเปลี่ยน Shift เป็น ${esc(x.requested_shift_id||'-')}</div><div>สถานะ: ${esc(x.status)}</div><div>เหตุผล: ${esc(x.reason)}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอเปลี่ยน Shift ที่กำลังดำเนินการ</div>'}</div>`);
+      <div ${view==='attendance'?'hidden':''}><div class="title" style="margin-top:16px">คำขอเปลี่ยนกะที่กำลังดำเนินการ</div>
+      <div class="list">${r.requests.filter(x=>x.request_type==='SHIFT_CHANGE').map(x=>`<div class="item"><b>${esc(x.request_date)}</b><div>ขอเปลี่ยน Shift เป็น ${esc(x.requested_shift_id||'-')}</div><div>สถานะ: ${esc(BA_UI.label(x.status))}</div><div>เหตุผล: ${esc(x.reason)}</div><div>หมายเหตุ Supervisor: ${esc(x.reviewer_note||'-')}</div></div>`).join('')||'<div class="item">ไม่มีคำขอเปลี่ยนกะที่กำลังดำเนินการ</div>'}</div></div>`);
   }catch(e){showModalError(e.message)}
 }
 
@@ -812,15 +728,16 @@ async function renderSupervisorHome(){
     const r=await BA_API.request('supervisor_dashboard_v2');
     k=r.kpis||k;
     window.SUPERVISOR_KPI_LISTS=r.lists||{};
+    Promise.all([BA_API.request('pending_attendance_correction_requests'),BA_API.request('pending_gps_requests')]).then(results=>BA_UI.registerRequests('attendance_requests',results.flatMap(x=>x.rows||[]))).catch(()=>{});
   }catch(e){
     dashboardError=e.message||'โหลด Dashboard ไม่สำเร็จ';
   }
 
-  $('supervisorView').innerHTML=`
+  $('supervisorView').innerHTML=`<nav class="app-nav" aria-label="เมนูหัวหน้างาน"><button onclick="closeModal();renderSupervisorHome()" aria-current="page">${BA_UI.icon('clock')}ภาพรวมทีม</button><button data-request-category="attendance_requests" onclick="showPendingAttendanceRequests()">${BA_UI.icon('request')}ขอลงเวลา</button><button onclick="showApprovalInbox()">${BA_UI.icon('leave')}คำขออื่น ๆ</button><button onclick="showSupervisorMonthlySummary()">${BA_UI.icon('report')}รายงาน</button></nav>
     ${dashboardError?`<div class="card error"><b>Dashboard โหลดไม่สำเร็จ</b><div>${esc(dashboardError)}</div><div class="muted" style="margin-top:6px">เมนูด้านล่างยังใช้งานได้</div></div>`:''}
     <div class="card">
       <div class="title">ภาพรวมทีมวันนี้</div>
-      <div class="kpis">
+      <div class="kpis" ${dashboardError?'hidden':''}>
         <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('total','พนักงานทั้งหมด')">พนักงานทั้งหมด<strong>${k.total}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
         <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('checked_in','เข้างานแล้ว')">เข้างานแล้ว<strong>${k.checked_in}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
         <button class="kpi" style="border:0;text-align:left;width:100%" onclick="showSupervisorKpiList('checked_out','ออกงานแล้ว')">ออกงานแล้ว<strong>${k.checked_out}</strong><span class="muted">แตะเพื่อดูรายชื่อ</span></button>
@@ -979,7 +896,7 @@ async function showApprovalInbox(){
       <div class="title" style="margin-top:14px">คำขอลา</div>
       <div class="list">${(r.leaves||[]).map(x=>`<div class="item">
         <b>${esc(x.employees?.employee_code||'')} · ${esc(x.employees?.display_name||'')}</b>
-        <div>${esc(x.leave_date)} · ${esc(x.leave_type)}</div>
+        <div>${esc(x.leave_date)} · ${esc(BA_UI.label(x.leave_type))}</div>
         <div>เหตุผล: ${esc(x.reason||'-')}</div>
         <div class="grid">
           <button class="green" onclick="reviewLeave('${x.id}','APPROVED')">อนุมัติ</button>
@@ -1050,8 +967,9 @@ async function reviewOfficeLocationFromInbox(id,decision){
 }
 
 
-async function showPendingAttendanceRequests(){showLoadingModal('กำลังโหลดคำขอลงเวลา');try{const r=await BA_API.request('pending_attendance_correction_requests');openModal(`<div class="title">คำขอลงเวลารออนุมัติ</div><button class="primary full" onclick="showPendingGpsRequests()">คำขอ GPS / ออกพัก / กลับจากพัก</button><div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div><div class="list">${r.rows.map(x=>`<div class="item"><b>${esc(x.employees?.employee_code)} · ${esc(x.employees?.display_name)}</b><div>วันที่: ${esc(x.request_date)}</div><div>ลืมลงเวลา: ${esc(AttendanceReview.names[x.request_side]||x.request_side)}</div><div>สาขา: ${esc(x.offices?.office_name||'-')}</div><div>เหตุผล: ${esc(x.reason||'-')}</div><div class="muted">ตรวจสอบประวัติ และระบุประเภทกับเวลาจริงก่อนอนุมัติ</div><div class="grid"><button class="green" onclick="reviewAttendanceCorrectionRequest('${x.id}','APPROVED')">อนุมัติ</button><button class="red" onclick="reviewAttendanceCorrectionRequest('${x.id}','REJECTED')">ปฏิเสธ</button></div></div>`).join('')||'<div class="item">ไม่มีคำขอลงเวลารออนุมัติ</div>'}</div>`)}catch(e){showModalError(e.message)}}
-async function reviewAttendanceCorrectionRequest(id,status){return AttendanceReview.open({kind:'correction',id,decision:status,request:(a,p)=>BA_API.request(a,p),mount:openModal,onDone:showPendingAttendanceRequests});}
+async function showPendingAttendanceRequests(){showLoadingModal('กำลังโหลดคำขอลงเวลา');try{const r=await BA_API.request('pending_attendance_correction_requests');openModal('<h2>คำขอลงเวลารออนุมัติ</h2><div class="toolbar"><button onclick="showPendingGpsRequests()">คำขอเมื่อยืนยันตำแหน่งไม่ได้</button></div>'+supervisorRequestTable(r.rows,'correction'));}catch(e){showModalError(e.message)}}
+
+async function reviewAttendanceCorrectionRequest(id,status){BA_UI.markRead(id);return AttendanceReview.open({kind:'correction',id,decision:status,request:(a,p)=>BA_API.request(a,p),mount:openModal,onDone:showPendingAttendanceRequests});}
 async function showPendingShiftRequests(){
   showLoadingModal('กำลังโหลดคำขอ');
   try{
@@ -1076,8 +994,8 @@ async function showPendingLeaves(){
       <div class="muted" style="margin-bottom:10px">พบ ${r.rows.length} รายการ</div>
       <div class="list">${r.rows.map(x=>`<div class="item">
         <b>${esc(x.employee_code||'')} · ${esc(x.employee_name)} · ${esc(x.leave_date)}</b>
-        <div>${esc(x.leave_type)} — ${esc(x.reason||'-')}</div>
-        <div>สถานะ: ${esc(x.status)}</div>
+        <div>${esc(BA_UI.label(x.leave_type))} — ${esc(x.reason||'-')}</div>
+        <div>สถานะ: ${esc(BA_UI.label(x.status))}</div>
         <div class="grid">
           <button class="green" onclick="reviewLeave('${x.id}','APPROVED')">อนุมัติ</button>
           <button class="red" onclick="reviewLeave('${x.id}','REJECTED')">ปฏิเสธ</button>
@@ -1107,7 +1025,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.6.7';
+  $('version').textContent='v4.7.0';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -1183,7 +1101,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.6.7';
+  $('version').textContent='v4.7.0';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}

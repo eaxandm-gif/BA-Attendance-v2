@@ -1,0 +1,24 @@
+/* Presentation helpers only; authorization and attendance state remain server-owned. */
+(() => {
+ const paths={clock:'M12 8v4l3 2 M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0',calendar:'M4 5h16v16H4z M8 3v4 M16 3v4 M4 10h16',request:'M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4',leave:'M4 7h16v14H4z M9 7V3h6v4 M8 12h8',people:'M16 21v-3a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v3 M13 3a4 4 0 0 1 0 8 M22 21v-3a4 4 0 0 0-3-4 M11 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0',report:'M4 3v18h17 M8 17v-5 M13 17V8 M18 17V4',coffee:'M3 8h13v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z M16 8h2a3 3 0 0 1 0 6h-2 M6 2v3 M11 2v3',exit:'M10 3H4v18h6 M8 12h13 M17 8l4 4-4 4'};
+ const icon=name=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||paths.request}"/></svg>`;
+ window.BA_UI={icon,label:value=>labels[value]||value};
+ const inbox=new Map();let scope='admin';
+ function readSet(){try{return new Set(JSON.parse(localStorage.getItem('ba-read:'+scope)||'[]'));}catch{return new Set();}}
+ function decorate(){const read=readSet();document.querySelectorAll('[data-request-category]').forEach(el=>{const unread=(inbox.get(el.dataset.requestCategory)||[]).some(id=>!read.has(id));const marker=el.querySelector('.unread-dot');if(unread&&!marker){const dot=document.createElement('span');dot.className='unread-dot';dot.setAttribute('role','img');dot.setAttribute('aria-label','มีคำขอยังไม่อ่าน');el.appendChild(dot);}else if(!unread&&marker)marker.remove();});}
+ Object.assign(window.BA_UI,{setScope(value){scope=value;inbox.clear();},registerRequests(category,rows){inbox.set(category,rows.filter(r=>r.status==='PENDING').map(r=>r.id));decorate();},markRead(id){const read=readSet();read.add(id);try{localStorage.setItem('ba-read:'+scope,JSON.stringify([...read].slice(-2000)));}catch{}decorate();},unread(id){return !readSet().has(id);}});
+ const labels={PENDING:'รออนุมัติ',APPROVED:'อนุมัติแล้ว',REJECTED:'ปฏิเสธแล้ว',CANCELLED:'ยกเลิก',SICK_LEAVE:'ลาป่วย',BUSINESS_LEAVE:'ลากิจ',VACATION:'ลาพักร้อน',WORKING:'กำลังทำงาน',COMPLETED:'ครบแล้ว',INCOMPLETE:'ข้อมูลไม่ครบ',ABSENT:'ขาดงาน',OFF:'วันหยุด',WORK:'วันทำงาน',FULL_DAY:'เต็มวัน',FIXED_BRANCH:'ประจำสาขา',MULTI_BRANCH:'หลายสาขา',STOCK_REFILL:'เติมสินค้า'};
+ // Translate only complete display text nodes; values, identifiers and request payloads stay unchanged.
+ function polish(root){
+  decorate();
+  root.querySelectorAll('td,.badge,option').forEach(el=>{if(el.children.length)return;const label=labels[el.textContent.trim()];if(label){if(el.tagName==='OPTION'&&!el.hasAttribute('value'))el.value=el.textContent.trim();el.textContent=label;}});
+  root.querySelectorAll('input,select,textarea').forEach(el=>{if(el.id&&!el.getAttribute('aria-label')&&!el.labels?.length){const label=el.closest('.field')?.querySelector('label');if(label)label.htmlFor=el.id;else el.setAttribute('aria-label',el.getAttribute('placeholder')||el.getAttribute('title')||({search:'ค้นหา',scheduleMonth:'เดือนตารางงาน',dailyDate:'วันที่รายงาน',monthlyMonth:'เดือนรายงาน',monthlyView:'รูปแบบรายงาน',monthlyEmployee:'พนักงาน',monthlySupervisor:'หัวหน้างาน',monthlyRegion:'ภูมิภาค',attendanceFrom:'ตั้งแต่วันที่',attendanceTo:'ถึงวันที่'}[el.id])||'เลือกข้อมูล');}});
+ }
+ let scheduled=false,frame=0;
+ const observer=new MutationObserver(()=>{if(scheduled)return;scheduled=true;frame=requestAnimationFrame(()=>{scheduled=false;observer.disconnect();polish(document);observer.observe(document.body,{childList:true,subtree:true});});});observer.observe(document.body,{childList:true,subtree:true});polish(document);
+ window.addEventListener('beforeunload',()=>{observer.disconnect();cancelAnimationFrame(frame);});
+ const modal=document.getElementById('modal');let previousFocus=null,wasOpen=false;
+ if(modal){const sheet=modal.querySelector('.sheet');sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-label','รายละเอียด');sheet.tabIndex=-1;
+ new MutationObserver(()=>{const open=modal.classList.contains('show');if(open&&!wasOpen){previousFocus=document.activeElement;sheet.focus();}if(!open&&wasOpen&&previousFocus?.isConnected)previousFocus.focus();wasOpen=open;}).observe(modal,{attributes:true,attributeFilter:['class']});
+ modal.addEventListener('keydown',e=>{if(e.key==='Escape'){const close=modal.querySelector('[onclick="closeModal()"]');close?.click();}if(e.key==='Tab'){const items=[...sheet.querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]')].filter(el=>!el.disabled&&el.getClientRects().length);if(!items.length){e.preventDefault();return;}const first=items[0],last=items.at(-1);if(e.shiftKey&&(document.activeElement===first||document.activeElement===sheet)){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});}
+})();
