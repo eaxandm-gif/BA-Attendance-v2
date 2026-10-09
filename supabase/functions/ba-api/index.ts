@@ -9,7 +9,7 @@ const GOOGLE_SYNC_URL = Deno.env.get('GOOGLE_SYNC_URL') || '';
 const GOOGLE_SYNC_SECRET = Deno.env.get('GOOGLE_SYNC_SECRET') || '';
 const sb = createClient(SUPABASE_URL, SERVICE_KEY, {auth:{persistSession:false}});
 const cors = {'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,x-admin-key,x-external-token,content-type','Access-Control-Allow-Methods':'POST,OPTIONS'};
-const json = (body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.6.7'}});
+const json = (body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json; charset=utf-8','X-BA-Version':'4.7.1'}});
 const fail=(m:string,s=400)=>json({success:false,message:m},s);
 const thaiDate=(d=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(d);
 const thaiMonth=()=>thaiDate().slice(0,7);
@@ -1192,7 +1192,7 @@ if(id.role==='EMPLOYEE'){
   const longitude=Number(p.longitude);
   const accuracy=Number(p.accuracy||0);
 
-  if(!eventType||!Number.isFinite(latitude)||!Number.isFinite(longitude)){
+  if(!eventType||p.latitude==null||p.longitude==null||String(p.latitude).trim()===''||String(p.longitude).trim()===''||!Number.isFinite(latitude)||Math.abs(latitude)>90||!Number.isFinite(longitude)||Math.abs(longitude)>180){
     return fail('ข้อมูล GPS ไม่ครบ');
   }
   const date=thaiDate();
@@ -1212,45 +1212,33 @@ if(id.role==='EMPLOYEE'){
   if(eventError)throw eventError;
   if(officeError)throw officeError;
 
+  const fixAt=Number(p.location_timestamp);
+  if(!Number.isFinite(fixAt)||fixAt<=0||Date.now()-fixAt>60000||fixAt-Date.now()>5000){
+    return json({success:false,code:'GPS_STALE',message:'พิกัดหมดอายุ กรุณาลองใหม่ หากยังไม่สำเร็จให้ปิดแล้วเปิดระบบลงเวลาใหม่'},422);
+  }
   const validOffices=(offices||[]).filter((o:any)=>
-    Number.isFinite(Number(o.latitude))&&
-    Number.isFinite(Number(o.longitude))&&
-    Number(o.radius_meters)>0
-  );
-  if(!validOffices.length)return fail('ยังไม่มีพิกัดสาขาที่ใช้งานได้ในระบบ');
-
-  const workOfficeEvent=(events||[]).find((e:any)=>
-    mode==='MULTI_BRANCH'
-      ? e.event_type==='BRANCH_IN'
-      : mode==='STOCK_REFILL'
-        ? ['WORK_IN','IN'].includes(e.event_type)
-        : e.event_type==='IN'
-  );
-
+    o.latitude!=null&&o.longitude!=null&&String(o.latitude).trim()!==''&&String(o.longitude).trim()!==''&&
+    Number.isFinite(Number(o.latitude))&&Math.abs(Number(o.latitude))<=90&&
+    Number.isFinite(Number(o.longitude))&&Math.abs(Number(o.longitude))<=180&&
+    Number.isFinite(Number(o.radius_meters))&&Number(o.radius_meters)>0);
+  const sortedEvents=[...(events||[])].sort((a:any,b:any)=>new Date(a.occurred_at).getTime()-new Date(b.occurred_at).getTime()||new Date(a.created_at||0).getTime()-new Date(b.created_at||0).getTime()||String(a.id||'').localeCompare(String(b.id||'')));
+  let anchorType:string[]=[];
+  if(mode==='FIXED_BRANCH'&&['BREAK_OUT','BREAK_IN','OUT'].includes(eventType))anchorType=['IN'];
+  if(mode==='STOCK_REFILL'&&['BREAK_OUT','BREAK_IN','WORK_OUT','OUT'].includes(eventType))anchorType=['WORK_IN','IN'];
+  if(mode==='STOCK_REFILL'&&eventType==='REFILL_OUT')anchorType=['REFILL_IN'];
+  if(mode==='MULTI_BRANCH'&&['BREAK_OUT','BREAK_IN','BRANCH_OUT'].includes(eventType))anchorType=['BRANCH_IN'];
+  const anchor=anchorType.length?[...sortedEvents].reverse().find((e:any)=>anchorType.includes(e.event_type)):null;
   let targetOffice:any=null;
-
-  // เมื่อเข้างานที่สาขาแล้ว การพัก/กลับจากพัก/ออกงาน
-  // ต้องตรวจ GPS กับสาขาเดิม ไม่ใช่เลือกสาขาที่ใกล้ที่สุดใหม่
-  const mustUseOriginalOffice=
-    (mode==='FIXED_BRANCH'&&['BREAK_OUT','BREAK_IN','OUT'].includes(eventType))||
-    (mode==='STOCK_REFILL'&&['BREAK_OUT','BREAK_IN','WORK_OUT','OUT'].includes(eventType));
-
-  if(mustUseOriginalOffice&&workOfficeEvent?.office_id){
-    targetOffice=validOffices.find((o:any)=>o.id===workOfficeEvent.office_id)||null;
+  if(anchorType.length){
+    if(!anchor?.office_id)return fail('INVALID_TRANSITION',409);
+    targetOffice=validOffices.find((o:any)=>o.id===anchor.office_id);
+    if(!targetOffice)return json({success:false,code:'GPS_OFFICE_UNAVAILABLE',message:'สาขาที่เริ่มรายการไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลเพื่อตรวจสอบ'},409);
+  }else{
+    const candidates=validOffices.map((office:any)=>({office,distance:distance(latitude,longitude,Number(office.latitude),Number(office.longitude))}));
+    candidates.sort((a:any,b:any)=>a.distance-b.distance||String(a.office.id).localeCompare(String(b.office.id)));
+    targetOffice=(candidates.find((c:any)=>c.distance<=Number(c.office.radius_meters)&&Number.isFinite(accuracy)&&accuracy>0&&accuracy<=allowedAccuracyForOffice(c.office))||candidates[0])?.office;
   }
-
-  if(!targetOffice){
-    let nearest:any=null;
-    for(const office of validOffices){
-      const metres=distance(latitude,longitude,Number(office.latitude),Number(office.longitude));
-      if(!nearest||metres<nearest.distance){
-        nearest={office,distance:metres};
-      }
-    }
-    targetOffice=nearest?.office||null;
-  }
-
-  if(!targetOffice)return fail('ไม่พบสาขาที่ใช้ตรวจ Location');
+  if(!targetOffice)return fail('ไม่พบสาขาที่มีพิกัดถูกต้องและพร้อมใช้งาน');
 
   const maxAllowedAccuracy=allowedAccuracyForOffice(targetOffice);
   if(!Number.isFinite(accuracy)||accuracy<=0||accuracy>maxAllowedAccuracy){
@@ -1275,24 +1263,9 @@ if(id.role==='EMPLOYEE'){
       `(ห่าง ${Math.round(targetDistance)} เมตร, ความแม่นยำ ${Math.round(accuracy)} เมตร)`},422);
   }
 
-  let officeId=targetOffice.id;
+  const officeId=targetOffice.id;
 
-  if(mode==='FIXED_BRANCH'){
-    if(eventType==='IN'&&workOfficeEvent&&workOfficeEvent.office_id!==officeId){
-      return fail('FIXED_BRANCH ทำงานได้วันละ 1 สาขา');
-    }
-    if(['BREAK_OUT','BREAK_IN','OUT'].includes(eventType)&&workOfficeEvent?.office_id){
-      officeId=workOfficeEvent.office_id;
-    }
-  }
-
-  if(mode==='STOCK_REFILL'){
-    if(['BREAK_OUT','BREAK_IN','WORK_OUT','OUT'].includes(eventType)&&workOfficeEvent?.office_id){
-      officeId=workOfficeEvent.office_id;
-    }
-  }
-
-  const {data:inserted,error:insertError}=await sb.rpc('insert_attendance_event_guarded',{
+  const {data:inserted,error:insertError}=await sb.rpc('insert_attendance_event_geofenced',{
     p_employee_id:id.ref.id,
     p_event_type:eventType,
     p_occurred_at:new Date().toISOString(),
@@ -1303,12 +1276,15 @@ if(id.role==='EMPLOYEE'){
     p_distance:targetDistance,
     p_source:source,
     p_created_by:id.profile.sub,
-    p_request_key:requestKey
+    p_request_key:requestKey,
+    p_fix_at:new Date(fixAt).toISOString()
   });
 
   if(insertError){
+    const gpsCode=String(insertError.message||'').match(/GPS_(?:STALE|OUTSIDE|ACCURACY|INVALID|OFFICE_UNAVAILABLE)/)?.[0];
+    if(gpsCode)return json({success:false,code:gpsCode,office_id:officeId,message:gpsCode==='GPS_OFFICE_UNAVAILABLE'?'สาขาไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแล':'ไม่สามารถยืนยันตำแหน่งได้ กรุณาลองใหม่หรือส่งคำขอให้ผู้ดูแล'},422);
     if(String(insertError.message||'').includes('DUPLICATE_ATTENDANCE_EVENT'))return fail('ระบบได้รับรายการนี้แล้ว กรุณาอย่ากดซ้ำ');
-    if(/INVALID_TRANSITION|IDEMPOTENCY_CONFLICT|INVALID_ATTENDANCE_DAY/.test(insertError.message||''))return fail(insertError.message,409);
+    if(/INVALID_TRANSITION|IDEMPOTENCY_CONFLICT|INVALID_ATTENDANCE_DAY|ATTENDANCE_OFFICE_CHANGED/.test(insertError.message||''))return fail(insertError.message,409);
     throw insertError;
   }
 

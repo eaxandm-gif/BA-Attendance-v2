@@ -167,5 +167,37 @@ await check('GPS editable review preserves receipt and original type while recor
  const events=[{event_type:'IN',occurred_at:r.requested_at.toISOString(),office_id:office,replace_event_id:null}];
  const result=await reviewV2(r.id,events,ctx.history_version,db,null,'gps');assert.equal(result.request.event_type,'IN');assert.equal(+new Date(result.request.requested_at),+r.requested_at);assert.deepEqual(result.request.reviewed_events,events);assert.equal(result.request.applied_event_ids.length,1);
 });
+
+await db.query('alter table offices add column latitude numeric default 13, add column longitude numeric default 100, add column radius_meters numeric default 200');
+await db.query(fs.readFileSync(new URL('supabase/migrations/202610090001_atomic_geofence.sql',root),'utf8'));
+const geo=async(id,type,opts={})=>(await (opts.client||db).query('select * from public.insert_attendance_event_geofenced($1,$2,clock_timestamp(),$3,$4,$5,$6,999999,$7,$8,$9,$10)',[id,type,opts.office||office,opts.lat??13,opts.lon??100,opts.accuracy??20,opts.source||'LIFF',opts.actor||id,opts.key||randomUUID(),opts.fix===undefined?new Date():opts.fix])).rows[0];
+await check('geofence validates raw fixes and recomputes stored distance',async()=>{
+ for(const opts of [{lat:91},{lon:460},{lat:NaN},{accuracy:-1},{accuracy:NaN},{accuracy:201},{fix:null},{fix:new Date(Date.now()-61000)},{fix:new Date(Date.now()+10000)},{lon:100.1}]){const id=await employee();await assert.rejects(()=>geo(id,'IN',opts),/GPS_/);assert.equal((await db.query('select count(*)::int n from attendance_events where employee_id=$1',[id])).rows[0].n,0);}
+ const id=await employee(),key=randomUUID();const event=await geo(id,'IN',{key});assert.equal(Number(event.distance_meters),0);await db.query('update offices set active=false where id=$1',[office]);try{assert.equal((await geo(id,'IN',{key,fix:null})).id,event.id);await assert.rejects(()=>geo(id,'BREAK_OUT'),/GPS_OFFICE_UNAVAILABLE/);}finally{await db.query('update offices set active=true where id=$1',[office]);}
+});
+await check('geofence binds multi-branch and refill exits to their active visit',async()=>{
+ const other=randomUUID();await db.query('insert into offices(id,latitude,longitude,radius_meters)values($1,13,100.1,200)',[other]);
+ const m=await employee('MULTI_BRANCH');await geo(m,'DAY_IN');await geo(m,'BRANCH_IN');await assert.rejects(()=>geo(m,'BRANCH_OUT',{office:other,lon:100.1}),/ATTENDANCE_OFFICE_CHANGED/);await assert.rejects(()=>geo(m,'BREAK_OUT',{office:other,lon:100.1}),/ATTENDANCE_OFFICE_CHANGED/);await geo(m,'BREAK_OUT');await geo(m,'BREAK_IN');await geo(m,'BRANCH_OUT');
+ const r=await employee('STOCK_REFILL');await geo(r,'REFILL_IN');await assert.rejects(()=>geo(r,'REFILL_OUT',{office:other,lon:100.1}),/ATTENDANCE_OFFICE_CHANGED/);await geo(r,'REFILL_OUT');await geo(r,'WORK_IN');
+ const f=await employee();await geo(f,'IN');await db.query('update offices set active=false where id=$1',[office]);try{await assert.rejects(()=>geo(f,'BREAK_OUT',{office:other,lon:100.1}),/ATTENDANCE_OFFICE_CHANGED/);await assert.rejects(()=>geo(f,'BREAK_OUT'),/GPS_OFFICE_UNAVAILABLE/);}finally{await db.query('update offices set active=true where id=$1',[office]);}
+});
+await check('new geofence RPC restricts privileges and old service bypass is closed',async()=>{
+ for(const role of ['anon','authenticated'])assert.equal((await db.query("select has_function_privilege($1,'public.insert_attendance_event_geofenced(uuid,attendance_event_type,timestamptz,uuid,numeric,numeric,numeric,numeric,text,text,text,timestamptz)','execute') ok",[role])).rows[0].ok,false);
+ assert.equal((await db.query("select has_function_privilege('service_role','public.insert_attendance_event_guarded(uuid,attendance_event_type,timestamptz,uuid,numeric,numeric,numeric,numeric,text,text,text)','execute') ok")).rows[0].ok,false);
+});
+await check('geofenced concurrent retries insert once and distinct double clicks reject',async()=>{
+ const id=await employee(),key=randomUUID(),cs=Array.from({length:6},()=>pg.getPgClient());
+ try{await Promise.all(cs.map(c=>c.connect()));const results=await Promise.all(cs.map(client=>geo(id,'IN',{key,client})));assert.equal(new Set(results.map(x=>x.id)).size,1);
+ const attempts=await Promise.allSettled(cs.map(client=>geo(id,'BREAK_OUT',{client})));assert.equal(attempts.filter(x=>x.status==='fulfilled').length,1);
+ assert.equal((await db.query('select count(*)::int n from attendance_events where employee_id=$1',[id])).rows[0].n,2);
+ }finally{await Promise.all(cs.map(c=>c.end()));}
+});
+await check('geofenced insert rechecks office configuration after concurrent update',async()=>{
+ const id=await employee(),c=pg.getPgClient();await c.connect();
+ try{await c.query('begin');await c.query('update offices set active=false where id=$1',[office]);
+ const pending=geo(id,'IN').then(()=>null,e=>e);await c.query('commit');assert.match(String(await pending),/GPS_OFFICE_UNAVAILABLE/);
+ assert.equal((await db.query('select count(*)::int n from attendance_events where employee_id=$1',[id])).rows[0].n,0);
+ }finally{await c.query('rollback');await c.end();await db.query('update offices set active=true where id=$1',[office]);}
+});
 console.log(`${passed} test groups passed`);
 }finally{if(db)await db.end();await pg.stop();}
