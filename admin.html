@@ -9,7 +9,7 @@
 <script src="attendance-review.js?v=4.7.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="ui.css?v=4.7.0">
+<link rel="stylesheet" href="ui.css?v=4.7.1">
 <script src="ui.js?v=4.7.0" defer></script>
 </head>
 <body class="admin-app">
@@ -188,7 +188,19 @@ function switchTab(id){
 function findName(list,id,key='id',label='display_name'){const x=(list||[]).find(v=>v[key]===id);return x?x[label]||x.office_name||x.supervisor_name||x.shift_name:id||'-'}
 function employeeVisible(e){const status=$('employeeStatusFilter')?.value||'all';return status==='all'||(status==='active'?e.active!==false:e.active===false);}
 function filterRows(rows){if(current==='employees')rows=rows.filter(employeeVisible);const q=$('search').value.trim().toLowerCase();return !q?rows:rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q))}
-function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`}
+function tableColumnKind(header){
+ if(/^\d{1,2}$/.test(String(header)))return 'day';
+ if(/Event ลงเวลา/.test(header))return 'events';
+ if(/เหตุผล|ข้อความ|ปัญหา|Error|ก่อน|หลัง/.test(header))return 'description';
+ if(/ดำเนินการ|จัดการ/.test(header))return 'actions';
+ if(/สาขา/.test(header))return 'office';
+ if(/พนักงาน|ชื่อ/.test(header))return 'person';
+ if(/สถานะ/.test(header))return 'status';
+ if(/วันที่|เดือน/.test(header))return 'date';
+ if(header==='เวลา'||header==='ประเภท / เวลา')return 'datetime';
+ return 'short';
+}
+function table(headers,rows){const kinds=headers.map(tableColumnKind);return `<p class="table-hint">เลื่อนตารางซ้าย–ขวาเพื่อดูคอลัมน์เพิ่มเติม</p><div class="table-wrap" tabindex="0" role="region" aria-label="ตารางข้อมูล เลื่อนซ้ายและขวาเพื่อดูทุกคอลัมน์"><table><thead><tr>${headers.map((h,i)=>`<th data-column="${kinds[i]}">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>{let i=0;return row.replace(/<td(?=[\s>])/g,()=>`<td data-column="${kinds[i++]||'short'}"`);}).join('')}</tbody></table></div>`}
 function localDateISO(d){const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
 function renderScheduleOverview(){
