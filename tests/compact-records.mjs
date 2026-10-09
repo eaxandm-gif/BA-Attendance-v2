@@ -13,4 +13,11 @@ const button=w.document.querySelector('[aria-controls]');w.toggleRowDetails(butt
 assert.ok(w.document.querySelector('button[onclick="edit()"]'));assert.equal(w.document.querySelector('[data-label="OT"]').textContent,'1:00');
 const firstId=detail.id;assert.ok(!w.table(headers,['<tr><td>next</td></tr>']).includes(`id="${firstId}"`));
 assert.equal(w.document.querySelectorAll('script').length,0);
+const wide=w.wideTable(headers,['<tr>'+headers.map((h,i)=>`<td class="value-${i}">${i}</td>`).join('')+'</tr>']);
+w.document.querySelector('main').innerHTML=wide;
+assert.equal(w.document.querySelectorAll('th').length,headers.length);
+assert.equal(w.document.querySelectorAll('td').length,headers.length);
+assert.equal(w.document.querySelectorAll('[hidden], [aria-controls]').length,0);
+assert.ok(w.document.querySelector('.value-6'));
+assert.ok(!html.includes('id="sendMiddayReport"')&&!html.includes('id="sendEnddayReport"'));
 dom.window.close();console.log('PASS compact records retain all data/actions, escape text, expose OT and toggle details with unique accessible IDs');

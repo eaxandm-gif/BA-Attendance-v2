@@ -47,8 +47,6 @@
       <input id="attendanceTo" class="hidden" type="date" onchange="loadAttendanceHistory()" title="Attendance ถึงวันที่" style="max-width:180px">
       <button id="recalcSummaryBtn" class="hidden" onclick="recalculateCurrentSummary()">คำนวณใหม่</button>
       <button id="exportSummaryBtn" class="hidden" onclick="exportCurrentSummary()">ดาวน์โหลด Excel</button>
-      <button id="sendMiddayReport" onclick="sendReport('MIDDAY')">ส่งรายงานรอบกลางวัน</button>
-      <button id="sendEnddayReport" onclick="sendReport('ENDDAY')">ส่งรายงานรอบสิ้นวัน</button>
     </div>
     <div id="content"></div>
   </section>
@@ -204,6 +202,10 @@ function tableColumnKind(header){
  if(/วันที่|เดือน/.test(header))return 'date';
  if(header==='เวลา'||header==='ประเภท / เวลา')return 'datetime';
  return 'short';
+}
+function wideTable(headers,rows){
+ const kinds=headers.map(tableColumnKind);
+ return `<div class="table-wrap monthly-wide" tabindex="0" role="region" aria-label="รายงานรายเดือน ทุกคอลัมน์"><table><thead><tr>${headers.map((h,i)=>`<th data-column="${kinds[i]}">${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>{let i=0;return row.replace(/<td(?=[\s>])/g,()=>`<td data-column="${kinds[i++]||'short'}"`)}).join('')}</tbody></table></div>`;
 }
 let detailSequence=0;
 function table(headers,rows){
@@ -572,7 +574,7 @@ function renderMonthlyEmployee(month){
   <div class="summary-kpi">วันลา<strong>${leave}</strong></div>
  </div>`;
  const title=`<div class="status"><b>${esc(emp.employee_code)} · ${esc(emp.display_name)}</b> · ${esc(emp.supervisors?.supervisor_name||'-')} · ${esc(month)}</div>`;
- const body=table(['วันที่','สถานะ','Shift','Event ลงเวลาทั้งหมด','เข้า','ออก','เวลาทำงาน','เวลาที่ต้องทำ','พัก','เติมของ','ขาด','OT','สาขา','ปัญหา'],rows.map(r=>`<tr>
+ const body=wideTable(['วันที่','สถานะ','Shift','Event ลงเวลาทั้งหมด','เข้า','ออก','เวลาทำงาน','เวลาที่ต้องทำ','พัก','เติมของ','ขาด','OT','สาขา','ปัญหา'],rows.map(r=>`<tr>
   <td>${esc(r.work_date)}</td><td>${esc(reportStatusLabel(r.status))}</td><td>${esc(r.shift_name||r.shift_id||'-')}</td><td style="min-width:260px">${esc(r.event_timeline||'-')}</td>
   <td>${esc(r.first_in||'-')}</td><td>${esc(r.last_out||'-')}</td><td>${fmtMinutes(r.credited_minutes)}</td><td>${fmtMinutes(r.required_minutes)}</td>
   <td>${fmtMinutes(r.break_minutes)}</td><td>${fmtMinutes(r.refill_minutes)}</td><td class="${r.short_minutes>0?'late':''}">${fmtMinutes(r.short_minutes)}</td>
@@ -683,7 +685,6 @@ function renderAttendanceRequests(){
 async function reviewAttendanceRequest(id,kind,status){BA_UI.markRead(id);return AttendanceReview.open({kind,id,decision:status,request:api,mount:html=>{$('content').innerHTML=html;},onDone:loadAttendanceRequests});}
 
 function render(){
- for(const id of ['sendMiddayReport','sendEnddayReport'])$(id)?.classList.toggle('hidden',!['daily','monthly'].includes(current));
  $('employeeStatusFilter')?.classList.toggle('hidden',!['employees','daily','monthly'].includes(current));
  $('createCurrentBtn').classList.toggle('hidden',current==='attendance_requests');
  $('bulkScheduleBtn').classList.toggle('hidden',current!=='schedules');
@@ -823,11 +824,6 @@ async function reviewRegistration(x,decision){
  }catch(e){msg(e.message,true);alert(e.message)}
 }
 
-async function sendReport(type){
- const date=prompt('วันที่รายงาน YYYY-MM-DD',new Date().toISOString().slice(0,10));if(!date)return;
- const reason=prompt('เหตุผลการส่งรายงาน','ส่งจาก Admin');
- try{const r=await api('send_line_report',{type,date,reason});msg(`ส่งรายงานสำเร็จ ${r.result.sent||0} Supervisor`);await refreshAll()}catch(e){msg(e.message,true)}
-}
 function toggleScheduleEditMode(){
  scheduleEditMode=!scheduleEditMode;
  if(!scheduleEditMode)selectedScheduleCells.clear();
