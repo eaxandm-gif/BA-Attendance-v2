@@ -9,7 +9,7 @@
 <script src="attendance-review.js?v=4.7.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="ui.css?v=4.7.4">
+<link rel="stylesheet" href="ui.css?v=4.7.5">
 <script src="ui.js?v=4.7.0" defer></script>
 </head>
 <body class="admin-app">
@@ -177,7 +177,12 @@ async function loadSummaryPeriod(){
 }
 async function loadMonthlyMatrixAttendance(){return loadSummaryPeriod()}
 const navGroups=[['daily','ภาพรวมวันนี้','clock',['daily']],['employees','พนักงาน','people',['employees','supervisors','registrations','offices','shifts']],['schedules','ตารางงาน','calendar',['schedules']],['attendance_requests','ขอลงเวลา','request',['attendance_requests','attendance']],['leaves','ขอลา','leave',['leaves']],['monthly','รายงาน','report',['monthly','line_logs','audits']]];
-function buildTabs(){const group=navGroups.find(g=>g[3].includes(current))||navGroups[0];$('mainNav').innerHTML=navGroups.map(g=>`<button ${['attendance_requests','leaves'].includes(g[0])?`data-request-category="${g[0]}"`:''} ${g===group?'aria-current="page"':''} onclick="switchTab('${g[0]}')">${window.BA_UI?.icon(g[2])||''}${g[1]}</button>`).join('');$('tabs').innerHTML=tabs.filter(([id])=>group[3].includes(id)).map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('');}
+function buildTabs(){
+ const group=navGroups.find(g=>g[3].includes(current))||navGroups[0];
+ $('mainNav').innerHTML=navGroups.map(g=>`<button ${['attendance_requests','leaves'].includes(g[0])?`data-request-category="${g[0]}"`:''} ${g===group?'aria-current="page"':''} onclick="switchTab('${g[0]}')">${window.BA_UI?.icon(g[2])||''}${g[1]}</button>`).join('');
+ $('tabs').innerHTML=`<label class="visually-hidden" for="sectionSelect">เมนูย่อย</label><select id="sectionSelect" onchange="switchTab(this.value)">${tabs.filter(([id])=>group[3].includes(id)).map(([id,label])=>`<option value="${id}" ${id===current?'selected':''}>${label}</option>`).join('')}</select>`;
+}
+
 function switchTab(id){
  ++reportGeneration;monthlyMatrixLoading=false;
  if(!['daily','monthly'].includes(id))restoreAdminListData();
@@ -200,7 +205,28 @@ function tableColumnKind(header){
  if(header==='เวลา'||header==='ประเภท / เวลา')return 'datetime';
  return 'short';
 }
-function table(headers,rows){const kinds=headers.map(tableColumnKind);return `<div class="table-wrap" tabindex="0" role="region" aria-label="ตารางข้อมูล เลื่อนซ้ายและขวาเพื่อดูทุกคอลัมน์"><table><thead><tr>${headers.map((h,i)=>`<th data-column="${kinds[i]}">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>{let i=0;return row.replace(/<td(?=[\s>])/g,()=>`<td data-column="${kinds[i++]||'short'}"`);}).join('')}</tbody></table></div>`}
+let detailSequence=0;
+function table(headers,rows){
+ const kinds=headers.map(tableColumnKind);
+ const preferred=['รหัส','วันที่','เดือน','พนักงาน','ชื่อ','สถานะ','เข้า','ออก','OT','เกิน','ประเภท / เวลา','ประเภท','Event','เวลา','Action','สาขา','BA','WORK','OFF','SICK','HOL','INC'];
+ const selected=new Set(preferred.filter(h=>headers.includes(h)).slice(0,6).map(h=>headers.indexOf(h)));
+ if(!selected.size)selected.add(0);
+ kinds.forEach((kind,i)=>{if(kind==='actions')selected.add(i)});
+ const primary=headers.map((_,i)=>i).filter(i=>selected.has(i)),secondary=headers.map((_,i)=>i).filter(i=>!selected.has(i));
+ const rendered=rows.map(row=>{
+  const template=document.createElement('template');template.innerHTML=`<table><tbody>${row}</tbody></table>`;
+  const cells=[...template.content.querySelectorAll('tr:first-child > td')];
+  if(!cells.length)return '';
+  const id=`row-detail-${++detailSequence}`;
+  const value=i=>cells[i]?.innerHTML||'—';
+  const main=primary.map(i=>`<td data-column="${kinds[i]}" data-label="${esc(headers[i])}"><div class="cell-value ${esc(cells[i]?.className||'')}">${value(i)}</div></td>`).join('');
+  const details=secondary.length?`<td data-label="รายละเอียด"><button aria-expanded="false" aria-controls="${id}" onclick="toggleRowDetails(this)">ดูรายละเอียด</button></td>`:'';
+  return `<tr>${main}${details}</tr>`+(secondary.length?`<tr id="${id}" class="record-detail" hidden><td colspan="${primary.length+1}"><dl class="record-fields">${secondary.map(i=>`<div><dt>${esc(headers[i])}</dt><dd>${value(i)}</dd></div>`).join('')}</dl></td></tr>`:'');
+ }).join('');
+ return `<div class="table-wrap compact-records"><table><thead><tr>${primary.map(i=>`<th>${esc(headers[i])}</th>`).join('')}${secondary.length?'<th>รายละเอียด</th>':''}</tr></thead><tbody>${rendered}</tbody></table></div>`;
+}
+function toggleRowDetails(button){const row=document.getElementById(button.getAttribute('aria-controls'));if(!row)return;row.hidden=!row.hidden;button.setAttribute('aria-expanded',String(!row.hidden));button.textContent=row.hidden?'ดูรายละเอียด':'ซ่อนรายละเอียด';}
+
 function localDateISO(d){const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
 function renderScheduleOverview(){
@@ -240,7 +266,7 @@ function renderScheduleOverview(){
      const click=scheduleEditMode
        ? `toggleScheduleCell('${emp.id}','${date}')`
        : `editRow(${payload})`;
-     cells.push(`<td><div class="schedule-cell ${cls}" title="${esc(title)}" onclick="${click}">${label}</div></td>`);
+     cells.push(`<td data-day="${day}"><div class="schedule-cell ${cls}" title="${esc(title)}" onclick="${click}">${label}</div></td>`);
    }
    return `<tr><td class="emp"><b>${esc(emp.employee_code)}</b><br>${esc(emp.display_name)}<br><span class="muted">Default: ${esc(emp.default_shift_id||'-')}</span></td>${cells.join('')}</tr>`;
  });

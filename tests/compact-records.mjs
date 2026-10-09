@@ -1,0 +1,16 @@
+import {JSDOM} from 'jsdom';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const html=fs.readFileSync(new URL('../admin.html',import.meta.url),'utf8');
+const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});
+const w=dom.window;
+w.eval(`const esc=x=>String(x??'').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');${html.slice(html.indexOf('function tableColumnKind'),html.indexOf('function localDateISO'))}`);
+const headers=['วันที่','พนักงาน','สถานะ','เข้า','ออก','OT','เหตุผล','จัดการ'];
+w.document.querySelector('main').innerHTML=w.table(headers,['<tr><td>2026-10-09</td><td>DEMO01</td><td>WORKING</td><td>10:00</td><td>20:00</td><td>1:00</td><td>เหตุผล &lt;ไม่ใช่ HTML&gt;</td><td><button onclick="edit()">แก้</button></td></tr>']);
+const detail=w.document.querySelector('.record-detail');
+assert.equal(detail.hidden,true);assert.match(detail.textContent,/เหตุผล <ไม่ใช่ HTML>/);
+const button=w.document.querySelector('[aria-controls]');w.toggleRowDetails(button);assert.equal(detail.hidden,false);assert.equal(button.getAttribute('aria-expanded'),'true');w.toggleRowDetails(button);assert.equal(detail.hidden,true);
+assert.ok(w.document.querySelector('button[onclick="edit()"]'));assert.equal(w.document.querySelector('[data-label="OT"]').textContent,'1:00');
+const firstId=detail.id;assert.ok(!w.table(headers,['<tr><td>next</td></tr>']).includes(`id="${firstId}"`));
+assert.equal(w.document.querySelectorAll('script').length,0);
+dom.window.close();console.log('PASS compact records retain all data/actions, escape text, expose OT and toggle details with unique accessible IDs');
