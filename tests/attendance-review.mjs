@@ -17,4 +17,9 @@ const index=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');con
 w.document.querySelector('main').innerHTML='<input id="arDate" value="2026-09-24"><input id="arSide" value="BREAK_BOTH"><input id="arOffice" value="o1"><input id="arReason" value="forgot"><input id="arTime" value="12:00"><input id="arTimeEnd" value="13:00"><button id="arSubmit"></button>';
 w.$=$;w.alert=()=>{};w.showShiftRequest=async()=>{};let submitted=[];w.BA_API={request:async(a,p)=>{submitted.push(p);throw Error('Network')}};w.eval(index.slice(begin,end));await w.submitAttendanceCorrectionRequest();await w.submitAttendanceCorrectionRequest();assert.equal(submitted.length,2);assert.equal(submitted[0].request_key,submitted[1].request_key);assert.deepEqual(Array.from(submitted[0].events,x=>x.event_type),['BREAK_OUT','BREAK_IN']);$('arTimeEnd').value='11:00';await w.submitAttendanceCorrectionRequest();assert.equal(submitted.length,2);
 console.log('PASS employee pair form validates order and keeps idempotency key on uncertain retry');
+await w.AttendanceReview.open({kind:'correction',id:'missing-time',decision:'REJECTED',mount:html=>w.document.querySelector('main').innerHTML=html,onDone:()=>{},request:async(a,p)=>{if(a==='attendance_review_context')return ctx;calls.push(p);}});
+assert.equal($('reviewRows').hidden,true);assert.equal($('reviewConfirmed').checked,false);
+$('reviewReason').value='ไม่ได้ระบุเวลาที่ต้องการแก้ไข';await $('reviewSave').onclick();
+assert.equal(calls.at(-1).status,'REJECTED');assert.equal(calls.at(-1).events,null);
+console.log('PASS rejection without actual time or approval checkbox retains required audit reason');
 w.close();

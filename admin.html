@@ -4,31 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BA Attendance Admin</title>
-<!-- Admin report fix 4.6.9: isolate report data from admin lists -->
+<!-- BA Attendance UI 4.7.0 -->
 <script src="admin-config.js?v=2.6.0"></script>
-<script src="attendance-review.js?v=4.6.5"></script>
+<script src="attendance-review.js?v=4.7.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<style>
-:root{--pink:#db2777;--soft:#fff1f7;--line:#fbcfe8;--text:#4a2438;--muted:#8b5f74;--danger:#b91c1c;--ok:#166534}
-*{box-sizing:border-box}body{margin:0;font-family:Arial,"Noto Sans Thai",sans-serif;background:#fff7fb;color:var(--text)}
-header{position:sticky;top:0;z-index:5;background:linear-gradient(135deg,#f9a8d4,#db2777);color:#fff;padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
-header h1{margin:0;font-size:20px}.wrap{max-width:1500px;margin:auto;padding:16px}.login,.panel{background:#fff;border-radius:18px;padding:16px;box-shadow:0 8px 24px #db27771c;margin-bottom:14px}
-.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.tabs{display:flex;gap:8px;overflow:auto;margin-bottom:14px}.tabs button{white-space:nowrap}
-button{border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer;background:#fce7f3;color:#9d174d}
-button.primary{background:var(--pink);color:white}button.danger{background:#fee2e2;color:var(--danger)}button.gray{background:#f3f4f6;color:#374151}
-input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
-.hidden{display:none!important}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{border-collapse:collapse;width:100%;min-width:900px}
-th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px;vertical-align:top}th{background:#fff1f7;position:sticky;top:0}
-.schedule-grid th,.schedule-grid td{text-align:center;min-width:54px}.schedule-grid .emp{text-align:left;position:sticky;left:0;background:#fff;z-index:2;min-width:170px}.schedule-cell{cursor:pointer;border-radius:8px;padding:5px 3px;line-height:1.2}.schedule-cell.work{background:#fce7f3}.schedule-cell.off{background:#f3f4f6}.schedule-cell.leave{background:#fef3c7}.schedule-cell.empty{background:#fff;border:1px dashed #fbcfe8;color:#aaa}.schedule-cell.default{background:#fff7fb;border:1px solid #f9a8d4}.schedule-cell.selected{outline:3px solid #db2777;outline-offset:-2px}.schedule-grid-wrap.editing{padding-bottom:120px}
-.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#fce7f3}.summary-kpis{display:grid;grid-template-columns:repeat(6,minmax(110px,1fr));gap:8px;margin-bottom:12px}.summary-kpi{background:#fff7fb;border:1px solid #fbcfe8;border-radius:12px;padding:10px}.summary-kpi strong{display:block;font-size:20px;color:#be185d}.late{color:#b91c1c;font-weight:700}.ontime{color:#166534;font-weight:700}@media(max-width:900px){.summary-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}.status{padding:10px;border-radius:10px;margin-bottom:10px}.ok{background:#dcfce7;color:var(--ok)}.err{background:#fee2e2;color:#991b1b}
-.modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;padding:16px;z-index:20}.modal.show{display:flex}
-.sheet{background:#fff;border-radius:18px;width:min(760px,100%);max-height:92vh;overflow:auto;padding:18px}.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-@media(max-width:700px){.grid{grid-template-columns:1fr}header{align-items:flex-start;gap:8px;flex-direction:column}}
-</style>
+
+<link rel="stylesheet" href="ui.css?v=4.7.0">
+<script src="ui.js?v=4.7.0" defer></script>
 </head>
-<body>
-<header><div><h1>BA Attendance — Admin System Management</h1><div style="font-size:12px">เพิ่ม · แก้ไข · ลบ · เปลี่ยน · ตรวจสอบ จากหน้าจอเดียว</div></div><button class="gray" onclick="logout()">ออกจากระบบ</button></header>
+<body class="admin-app">
+<header><div><h1>BA Attendance · ผู้ดูแล</h1></div><button class="gray" onclick="logout()">ออกจากระบบ</button></header>
 <div class="wrap">
 <section id="loginBox" class="login">
   <div id="loginStatus"></div>
@@ -39,12 +24,13 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
 </section>
 <div id="app" class="hidden">
   <div id="status"></div>
-  <div class="tabs" id="tabs"></div>
+  <nav class="app-nav" id="mainNav" aria-label="เมนูผู้ดูแล"></nav><div class="tabs" id="tabs"></div>
   <section class="panel">
     <div class="toolbar">
       <button id="createCurrentBtn" class="primary" onclick="createCurrent()">เพิ่มรายการ</button>
       <button id="bulkScheduleBtn" class="hidden" onclick="toggleScheduleEditMode()">เลือกหลายคน/หลายวัน</button>
       <button onclick="refreshAll()">รีเฟรช</button>
+      <select id="employeeStatusFilter" aria-label="สถานะพนักงาน" onchange="render()" style="max-width:200px"><option value="active">พนักงานที่ใช้งาน</option><option value="all">พนักงานทั้งหมด</option><option value="inactive">ปิดใช้งาน</option></select>
       <input id="search" placeholder="ค้นหา..." oninput="render()" style="max-width:300px">
       <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
       <input id="dailyDate" class="hidden" type="date" onchange="loadSummaryPeriod()" style="max-width:180px">
@@ -61,8 +47,8 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
       <input id="attendanceTo" class="hidden" type="date" onchange="loadAttendanceHistory()" title="Attendance ถึงวันที่" style="max-width:180px">
       <button id="recalcSummaryBtn" class="hidden" onclick="recalculateCurrentSummary()">คำนวณใหม่</button>
       <button id="exportSummaryBtn" class="hidden" onclick="exportCurrentSummary()">ดาวน์โหลด Excel</button>
-      <button onclick="sendReport('MIDDAY')">ส่งความผิดปกติเมื่อวาน</button>
-      <button onclick="sendReport('ENDDAY')">ส่งความผิดปกติเมื่อวาน</button>
+      <button id="sendMiddayReport" onclick="sendReport('MIDDAY')">ส่งรายงานรอบกลางวัน</button>
+      <button id="sendEnddayReport" onclick="sendReport('ENDDAY')">ส่งรายงานรอบสิ้นวัน</button>
     </div>
     <div id="content"></div>
   </section>
@@ -87,13 +73,13 @@ th,td{padding:9px;border-bottom:1px solid #fce7f3;text-align:left;font-size:13px
     <button class="primary" onclick="saveSelectedScheduleCells()">บันทึกทั้งหมด</button>
   </div>
 </div>
-<div id="modal" class="modal"><div class="sheet"><h3 id="modalTitle"></h3><div id="modalBody"></div><div class="actions"><button class="gray" onclick="closeModal()">ยกเลิก</button><button class="primary" id="saveBtn">บันทึก</button></div></div></div>
+<div id="modal" class="modal"><div class="sheet"><button class="modal-close" onclick="closeModal()">ปิด</button><h3 id="modalTitle"></h3><div id="modalBody"></div><div class="actions"><button class="gray" onclick="closeModal()">ยกเลิก</button><button class="primary" id="saveBtn">บันทึก</button></div></div></div>
 <script>
 const $=id=>document.getElementById(id);
 let KEY='',DATA={},current='employees',selectedScheduleCells=new Set(),scheduleEditMode=false,attendanceLoading=false,monthlyMatrixLoading=false;
 const tabs=[
- ['registrations','อนุมัติ BA ใหม่'],['employees','พนักงาน BA'],['supervisors','Supervisor'],['offices','สาขา'],['shifts','Shift'],
- ['attendance_requests','คำขอลงเวลา BA'],['schedules','ตารางงาน'],['attendance','Attendance'],['leaves','การลา'],
+ ['registrations','อนุมัติ BA ใหม่'],['employees','พนักงาน BA'],['supervisors','หัวหน้างาน'],['offices','สาขา'],['shifts','กะงาน'],
+ ['attendance_requests','คำขอลงเวลา BA'],['schedules','ตารางงาน'],['attendance','รายการลงเวลา'],['leaves','การลา'],
  ['daily','สรุปรายวัน'],['monthly','สรุปรายเดือน'],['line_logs','LINE Logs'],['audits','Audit Logs']
 ];
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -125,12 +111,13 @@ async function login(){
  box.innerHTML='<div class="status">กำลังเชื่อมต่อ Admin API...</div>';
  try{
   const r=await api('bootstrap');
-  DATA=r.data||{};
+  DATA=r.data||{};BA_UI.registerRequests('leaves',DATA.leaves||[]);
   localStorage.setItem('ba_admin_key',KEY);
   $('loginBox').classList.add('hidden');
   $('app').classList.remove('hidden');
   buildTabs();
   render();
+  api('attendance_requests',{status:'PENDING'}).then(r=>BA_UI.registerRequests('attendance_requests',[...(r.corrections||[]),...(r.gps||[])])).catch(()=>{});
  }catch(e){
   localStorage.removeItem('ba_admin_key');
   box.innerHTML=`<div class="status err">${esc(e.message)}</div>`;
@@ -189,7 +176,8 @@ async function loadSummaryPeriod(){
  finally{if(generation===reportGeneration){monthlyMatrixLoading=false;render()}}
 }
 async function loadMonthlyMatrixAttendance(){return loadSummaryPeriod()}
-function buildTabs(){$('tabs').innerHTML=tabs.map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('')}
+const navGroups=[['daily','ภาพรวมวันนี้','clock',['daily']],['employees','พนักงาน','people',['employees','supervisors','registrations','offices','shifts']],['schedules','ตารางงาน','calendar',['schedules']],['attendance_requests','ขอลงเวลา','request',['attendance_requests','attendance']],['leaves','ขอลา','leave',['leaves']],['monthly','รายงาน','report',['monthly','line_logs','audits']]];
+function buildTabs(){const group=navGroups.find(g=>g[3].includes(current))||navGroups[0];$('mainNav').innerHTML=navGroups.map(g=>`<button ${['attendance_requests','leaves'].includes(g[0])?`data-request-category="${g[0]}"`:''} ${g===group?'aria-current="page"':''} onclick="switchTab('${g[0]}')">${window.BA_UI?.icon(g[2])||''}${g[1]}</button>`).join('');$('tabs').innerHTML=tabs.filter(([id])=>group[3].includes(id)).map(([id,label])=>`<button class="${id===current?'primary':''}" onclick="switchTab('${id}')">${label}</button>`).join('');}
 function switchTab(id){
  ++reportGeneration;monthlyMatrixLoading=false;
  if(!['daily','monthly'].includes(id))restoreAdminListData();
@@ -198,7 +186,8 @@ function switchTab(id){
  if(id==='monthly'||id==='daily')loadSummaryPeriod();
 }
 function findName(list,id,key='id',label='display_name'){const x=(list||[]).find(v=>v[key]===id);return x?x[label]||x.office_name||x.supervisor_name||x.shift_name:id||'-'}
-function filterRows(rows){const q=$('search').value.trim().toLowerCase();return !q?rows:rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q))}
+function employeeVisible(e){const status=$('employeeStatusFilter')?.value||'all';return status==='all'||(status==='active'?e.active!==false:e.active===false);}
+function filterRows(rows){if(current==='employees')rows=rows.filter(employeeVisible);const q=$('search').value.trim().toLowerCase();return !q?rows:rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q))}
 function table(headers,rows){return `<div class="table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`}
 function localDateISO(d){const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
@@ -347,7 +336,7 @@ function summaryForEmployeeDate(emp,date){
 }
 function buildDailySummary(date){
  return (DATA.employees||[])
-   .filter(e=>e.active!==false)
+   .filter(employeeVisible)
    .map(e=>summaryForEmployeeDate(e,date));
 }
 function relevantDatesForEmployeeMonth(emp,month){
@@ -398,7 +387,7 @@ function buildMonthlyMatrix(month){
    if(!eventMap.has(key))eventMap.set(key,[]);
    eventMap.get(key).push(event);
  }
- return (DATA.employees||[]).filter(emp=>{
+ return (DATA.employees||[]).filter(employeeVisible).filter(emp=>{
    if(emp.active===false&&!relevantDatesForEmployeeMonth(emp,month).length)return false;
    if(supervisor&&emp.supervisor_id!==supervisor)return false;
    if(region&&emp.offices?.region!==region)return false;
@@ -416,7 +405,7 @@ function buildMonthlyMatrix(month){
  });
 }
 function buildMonthlySummary(month){
- return (DATA.employees||[]).filter(emp=>
+ return (DATA.employees||[]).filter(employeeVisible).filter(emp=>
    emp.active!==false||relevantDatesForEmployeeMonth(emp,month).length>0
  ).map(emp=>{
    const rows=relevantDatesForEmployeeMonth(emp,month)
@@ -645,17 +634,19 @@ let attendanceRequestRows=null,attendanceRequestStatus='PENDING',requestReviewBu
 const eventNames={IN:'เข้างาน',OUT:'ออกงาน',BREAK_OUT:'ออกพัก',BREAK_IN:'กลับจากพัก',WORK_IN:'เข้างาน',WORK_OUT:'ออกงาน',DAY_IN:'เริ่มวัน',DAY_OUT:'จบวัน',BRANCH_IN:'เข้าสาขา',BRANCH_OUT:'ออกสาขา',REFILL_IN:'เข้าเติมของ',REFILL_OUT:'ออกจากเติมของ'};
 async function loadAttendanceRequests(){
  $('content').innerHTML='<div class="status">กำลังโหลดคำขอ...</div>';
- try{const r=await api('attendance_requests',{status:attendanceRequestStatus});attendanceRequestRows=[...(r.corrections||[]).map(x=>({...x,kind:'correction'})),...(r.gps||[]).map(x=>({...x,kind:'gps'}))].sort((a,b)=>a.created_at.localeCompare(b.created_at));if(current==='attendance_requests')renderAttendanceRequests();}
+ try{const r=await api('attendance_requests',{status:attendanceRequestStatus});attendanceRequestRows=[...(r.corrections||[]).map(x=>({...x,kind:'correction'})),...(r.gps||[]).map(x=>({...x,kind:'gps'}))].sort((a,b)=>a.created_at.localeCompare(b.created_at));if(attendanceRequestStatus==='PENDING')BA_UI.registerRequests('attendance_requests',attendanceRequestRows);if(current==='attendance_requests')renderAttendanceRequests();}
  catch(e){attendanceRequestRows=[];$('content').innerHTML=`<div class="status err">${esc(e.message)}</div><button onclick="loadAttendanceRequests()">ลองใหม่</button>`;}
 }
 function legacyBreakRequest(x){return x.kind==='correction'&&['IN','OUT'].includes(x.request_side)&&/(พัก|เบรค|เบรก|break)/i.test(x.reason||'');}
 function renderAttendanceRequests(){
  if(attendanceRequestRows===null){loadAttendanceRequests();return;}
- $('content').innerHTML=`<h2>คำขอลงเวลา BA</h2><select onchange="attendanceRequestStatus=this.value;loadAttendanceRequests()">${[['PENDING','รออนุมัติ'],['APPROVED','อนุมัติแล้ว'],['REJECTED','ปฏิเสธแล้ว']].map(([v,l])=>`<option value="${v}" ${v===attendanceRequestStatus?'selected':''}>${l}</option>`).join('')}</select><button onclick="loadAttendanceRequests()">รีเฟรชคำขอ</button><p>ตรวจสอบประวัติและแก้ประเภท เวลา หรือสาขาก่อนอนุมัติ ระบบเก็บคำขอต้นฉบับและเหตุผลการแก้ไข แสดงได้สูงสุด 1,000 รายการต่อประเภท</p>`+table(['พนักงาน','ประเภท / เวลา','สาขา / เหตุผล','สถานะ','ดำเนินการ'],filterRows(attendanceRequestRows).map(x=>`<tr><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${x.kind==='gps'?'GPS · '+esc(eventNames[x.event_type]||x.event_type)+'<br>'+esc(new Date(x.requested_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'})):esc(x.request_date)+' · '+esc(AttendanceReview.names[x.request_side]||x.request_side)}</td><td>${esc(x.offices?.office_name)}<br>${esc(x.reason)}${legacyBreakRequest(x)?'<br><strong>คำขออาจเลือกประเภทผิด: กดตรวจแก้และอนุมัติ เพื่อระบุรายการพักและเวลาจริง</strong>':''}${x.kind==='gps'?'<br>ความคลาดเคลื่อน: '+esc(x.accuracy_meters??'ไม่มีพิกัด'):''}</td><td>${esc(x.status)}<br>${esc(x.reviewer_note||'')}</td><td>${x.status==='PENDING'?`<button onclick="reviewAttendanceRequest('${x.id}','${x.kind}','APPROVED')">ตรวจแก้และอนุมัติ</button><button onclick="reviewAttendanceRequest('${x.id}','${x.kind}','REJECTED')">ปฏิเสธ</button>`:'—'}</td></tr>`));
+ $('content').innerHTML=`<h2>คำขอลงเวลา BA</h2><label for="requestStatusFilter">รายการคำขอ</label><select id="requestStatusFilter" onchange="attendanceRequestStatus=this.value;loadAttendanceRequests()">${[['PENDING','รออนุมัติ'],['APPROVED','ประวัติ · อนุมัติแล้ว'],['REJECTED','ประวัติ · ปฏิเสธแล้ว']].map(([v,l])=>`<option value="${v}" ${v===attendanceRequestStatus?'selected':''}>${l}</option>`).join('')}</select><button onclick="loadAttendanceRequests()">รีเฟรชคำขอ</button><p>ตรวจสอบประวัติและแก้ประเภท เวลา หรือสาขาก่อนอนุมัติ ระบบเก็บคำขอต้นฉบับและเหตุผลการแก้ไข แสดงได้สูงสุด 1,000 รายการต่อประเภท</p>`+table(['พนักงาน','ประเภท / เวลา','สาขา / เหตุผล','สถานะ','ดำเนินการ'],filterRows(attendanceRequestRows).map(x=>`<tr><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${x.kind==='gps'?'GPS · '+esc(eventNames[x.event_type]||x.event_type)+'<br>'+esc(new Date(x.requested_at).toLocaleString('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok'})):esc(x.request_date)+' · '+esc(AttendanceReview.names[x.request_side]||x.request_side)}</td><td>${esc(x.offices?.office_name)}<br>เหตุผล: ${esc(x.reason)}${legacyBreakRequest(x)?'<br><strong>คำขออาจเลือกประเภทผิด: กดตรวจแก้และอนุมัติ เพื่อระบุรายการพักและเวลาจริง</strong>':''}${x.kind==='gps'?'<br>ความคลาดเคลื่อน: '+esc(x.accuracy_meters??'ไม่มีพิกัด'):''}</td><td>${esc(BA_UI.label(x.status))}<br>${esc(x.reviewer_note||'')}</td><td>${x.status==='PENDING'?`<button onclick="reviewAttendanceRequest('${x.id}','${x.kind}','APPROVED')">ตรวจแก้และอนุมัติ</button><button onclick="reviewAttendanceRequest('${x.id}','${x.kind}','REJECTED')">ปฏิเสธ</button>`:'—'}</td></tr>`));
 }
-async function reviewAttendanceRequest(id,kind,status){return AttendanceReview.open({kind,id,decision:status,request:api,mount:html=>{$('content').innerHTML=html;},onDone:loadAttendanceRequests});}
+async function reviewAttendanceRequest(id,kind,status){BA_UI.markRead(id);return AttendanceReview.open({kind,id,decision:status,request:api,mount:html=>{$('content').innerHTML=html;},onDone:loadAttendanceRequests});}
 
 function render(){
+ for(const id of ['sendMiddayReport','sendEnddayReport'])$(id)?.classList.toggle('hidden',!['daily','monthly'].includes(current));
+ $('employeeStatusFilter')?.classList.toggle('hidden',!['employees','daily','monthly'].includes(current));
  $('createCurrentBtn').classList.toggle('hidden',current==='attendance_requests');
  $('bulkScheduleBtn').classList.toggle('hidden',current!=='schedules');
  $('scheduleMonth').classList.toggle('hidden',current!=='schedules');
@@ -690,7 +681,7 @@ function render(){
    if(!$('monthlyMonth').value)$('monthlyMonth').value=bangkokDateKey(new Date()).slice(0,7);
    if($('monthlySupervisor').options.length===1)$('monthlySupervisor').innerHTML='<option value="">Supervisor ทั้งหมด</option>'+(DATA.supervisors||[]).filter(s=>s.active!==false).map(s=>`<option value="${s.id}">${esc(s.supervisor_name)}</option>`).join('');
    if($('monthlyRegion').options.length===1)$('monthlyRegion').innerHTML='<option value="">Region ทั้งหมด</option>'+[...new Set((DATA.offices||[]).map(o=>o.region).filter(Boolean))].sort().map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
-   const allowedEmployees=(DATA.employees||[]).filter(e=>e.active!==false||relevantDatesForEmployeeMonth(e,$('monthlyMonth').value).length>0).filter(e=>!$('monthlySupervisor').value||e.supervisor_id===$('monthlySupervisor').value).filter(e=>!$('monthlyRegion').value||e.offices?.region===$('monthlyRegion').value);
+   const allowedEmployees=(DATA.employees||[]).filter(employeeVisible).filter(e=>e.active!==false||relevantDatesForEmployeeMonth(e,$('monthlyMonth').value).length>0).filter(e=>!$('monthlySupervisor').value||e.supervisor_id===$('monthlySupervisor').value).filter(e=>!$('monthlyRegion').value||e.offices?.region===$('monthlyRegion').value);
    const selectedEmployee=$('monthlyEmployee').value;
    $('monthlyEmployee').innerHTML='<option value="">เลือกพนักงาน</option>'+allowedEmployees.map(e=>`<option value="${e.id}" ${e.id===selectedEmployee?'selected':''}>${esc(e.employee_code)} · ${esc(e.display_name)}</option>`).join('');
    if($('monthlyView').value==='employee'&&!$('monthlyEmployee').value&&allowedEmployees[0])$('monthlyEmployee').value=allowedEmployees[0].id;
@@ -713,23 +704,24 @@ function render(){
       <td><b>${esc(x.display_name||x.full_name)}</b><br>${esc(x.full_name||'')}</td>
       <td>${esc(x.phone)}</td>
       <td>${esc(x.supervisors?.supervisor_name||x.requested_supervisor_id||'-')}</td>
-      <td>${esc(x.status)}</td>
-      <td><button class="primary" onclick='reviewRegistration(${JSON.stringify(x)},"APPROVED")'>อนุมัติ</button> <button class="danger" onclick='reviewRegistration(${JSON.stringify(x)},"REJECTED")'>ไม่อนุมัติ</button></td>
+      <td>${esc(BA_UI.label(x.status))}</td>
+      <td><button class="primary" onclick='reviewRegistration(${esc(JSON.stringify(x))},"APPROVED")'>อนุมัติ</button> <button class="danger" onclick='reviewRegistration(${esc(JSON.stringify(x))},"REJECTED")'>ไม่อนุมัติ</button></td>
     </tr>`))}
     <h3>ประวัติคำขอ</h3>
-    ${table(['เวลา','ชื่อ','เบอร์','Supervisor','สถานะ'],done.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.display_name||x.full_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.supervisors?.supervisor_name||'-')}</td><td>${esc(x.status)}</td></tr>`))}
+    ${table(['เวลา','ชื่อ','เบอร์','Supervisor','สถานะ'],done.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.display_name||x.full_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.supervisors?.supervisor_name||'-')}</td><td>${esc(BA_UI.label(x.status))}</td></tr>`))}
    `;
  }
- if(current==='employees')return $('content').innerHTML=table(['รหัส','ชื่อ','โหมด','สาขา','Supervisor','Shift','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.employee_code)}</td><td>${esc(x.display_name)}</td><td>${esc(x.ba_mode)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.default_shift_id)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
- if(current==='supervisors')return $('content').innerHTML=table(['รหัส','ชื่อ','โทร','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.supervisor_code)}</td><td>${esc(x.supervisor_name)}</td><td>${esc(x.phone)}</td><td>${esc(x.line_user_id)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
- if(current==='offices')return $('content').innerHTML=table(['รหัส','สาขา','Region','พิกัด','รัศมี','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.office_code)}</td><td>${esc(x.office_name)}</td><td>${esc(x.region)}</td><td>${esc(x.latitude)}, ${esc(x.longitude)}</td><td>${esc(x.radius_meters)} m</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
- if(current==='shifts')return $('content').innerHTML=table(['ID','ชื่อ','เริ่ม','เลิก','งาน','พัก','Grace','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.id)}</td><td>${esc(x.shift_name)}</td><td>${esc(x.start_time)}</td><td>${esc(x.end_time)}</td><td>${esc(x.required_minutes)}</td><td>${esc(x.break_minutes)}</td><td>${esc(x.grace_minutes)}</td><td>${x.active?'✅':'❌'}</td><td>${buttons(x)}</td></tr>`));
- if(current==='attendance')return $('content').innerHTML=`<div class="status">ช่วง ${esc($('attendanceFrom').value)} ถึง ${esc($('attendanceTo').value)} · ${rows.length} รายการ${attendanceLoading?' · กำลังโหลด...':''}</div>`+table(['เวลา','พนักงาน','Event','สาขา','Source','จัดการ'],rows.map(x=>`<tr><td>${esc(new Date(x.occurred_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.event_type)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.source)}</td><td>${buttons(x)}</td></tr>`));
- if(current==='leaves')return $('content').innerHTML=table(['วันที่','พนักงาน','ประเภท','เหตุผล','สถานะ','ผู้อนุมัติ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.leave_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.leave_type)}</td><td>${esc(x.reason)}</td><td>${esc(x.status)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${buttons(x)}</td></tr>`));
- if(current==='line_logs')return $('content').innerHTML=table(['วันที่','ประเภท','Supervisor','สถานะ','ข้อความ','Error'],rows.map(x=>`<tr><td>${esc(x.report_date)}</td><td>${esc(x.report_type)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(x.status)}</td><td style="white-space:pre-wrap">${esc(x.message)}</td><td>${esc(x.error)}</td></tr>`));
+ if(current==='employees')return $('content').innerHTML=table(['รหัส','ชื่อ','ประเภท','สาขา','หัวหน้างาน','กะ','บัญชี LINE','สถานะ','ดำเนินการ'],rows.map(x=>`<tr><td>${esc(x.employee_code)}</td><td>${esc(x.display_name)}</td><td>${esc(BA_UI.label(x.ba_mode))}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(findName(DATA.shifts,x.default_shift_id,'id','shift_name'))}</td><td>${x.line_user_id?'เชื่อมแล้ว':'ยังไม่เชื่อม'}</td><td>${x.active?'ใช้งาน':'ปิดใช้งาน'}</td><td>${buttons(x)} <button onclick="prepareSupervisor('${x.id}')">ตั้งเป็นหัวหน้างาน</button></td></tr>`));
+ if(current==='supervisors')return $('content').innerHTML=table(['รหัส','ชื่อ','โทร','LINE','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.supervisor_code)}</td><td>${esc(x.supervisor_name)}</td><td>${esc(x.phone)}</td><td>${x.line_user_id?'เชื่อมแล้ว':'ยังไม่เชื่อม'}</td><td>${x.active?'ใช้งาน':'ปิดใช้งาน'}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='offices')return $('content').innerHTML=table(['รหัส','สาขา','Region','พิกัด','รัศมี','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.office_code)}</td><td>${esc(x.office_name)}</td><td>${esc(x.region)}</td><td>${esc(x.latitude)}, ${esc(x.longitude)}</td><td>${esc(x.radius_meters)} m</td><td>${x.active?'ใช้งาน':'ปิดใช้งาน'}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='shifts')return $('content').innerHTML=table(['ID','ชื่อ','เริ่ม','เลิก','งาน','พัก','Grace','Active','จัดการ'],rows.map(x=>`<tr><td>${esc(x.id)}</td><td>${esc(x.shift_name)}</td><td>${esc(x.start_time)}</td><td>${esc(x.end_time)}</td><td>${esc(x.required_minutes)}</td><td>${esc(x.break_minutes)}</td><td>${esc(x.grace_minutes)}</td><td>${x.active?'ใช้งาน':'ปิดใช้งาน'}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='attendance')return $('content').innerHTML=`<div class="status">ช่วง ${esc($('attendanceFrom').value)} ถึง ${esc($('attendanceTo').value)} · ${rows.length} รายการ${attendanceLoading?' · กำลังโหลด...':''}</div>`+table(['เวลา','พนักงาน','Event','สาขา','Source','จัดการ'],rows.map(x=>`<tr><td>${esc(new Date(x.occurred_at).toLocaleString('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok'}))}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.event_type)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.source)}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='leaves')return $('content').innerHTML=table(['วันที่','พนักงาน','ประเภท','เหตุผล','สถานะ','ผู้อนุมัติ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.leave_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(BA_UI.label(x.leave_type))}</td><td>${esc(x.reason)}</td><td>${esc(BA_UI.label(x.status))}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${buttons(x)}</td></tr>`));
+ if(current==='line_logs')return $('content').innerHTML=table(['วันที่','ประเภท','Supervisor','สถานะ','ข้อความ','Error'],rows.map(x=>`<tr><td>${esc(x.report_date)}</td><td>${esc(x.report_type)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(BA_UI.label(x.status))}</td><td style="white-space:pre-wrap">${esc(x.message)}</td><td>${esc(x.error)}</td></tr>`));
  if(current==='audits')return $('content').innerHTML=table(['เวลา','Action','Entity','ID','เหตุผล','ก่อน','หลัง'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)}</td><td>${esc(x.entity_id)}</td><td>${esc(x.reason)}</td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.before_data,null,2))}</pre></details></td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.after_data,null,2))}</pre></details></td></tr>`));
 }
-function buttons(x){return `<button onclick='editRow(${JSON.stringify(x)})'>แก้</button> <button class="danger" onclick='deleteRow(${JSON.stringify(x)})'>ลบ</button>`}
+function buttons(x){return `<button onclick='editRow(${esc(JSON.stringify(x))})'>แก้</button> <button class="danger" onclick='deleteRow(${esc(JSON.stringify(x))})'>ลบ</button>`}
+function prepareSupervisor(employeeId){const employee=(DATA.employees||[]).find(e=>e.id===employeeId);if(!employee)return;if(!employee.line_user_id)return msg('พนักงานยังไม่ได้เชื่อมบัญชี LINE',true);const existing=(DATA.supervisors||[]).find(s=>s.line_user_id===employee.line_user_id);switchTab('supervisors');if(existing){editRow(existing);return;}editRow({supervisor_code:employee.employee_code,supervisor_name:employee.display_name,phone:employee.phone,line_user_id:employee.line_user_id,active:true,note:'เลื่อนจาก BA '+employee.employee_code});$('modalTitle').textContent='ตั้งเป็นหัวหน้างาน · '+employee.display_name;}
 function createCurrent(){if(['registrations','daily','monthly','line_logs','audits'].includes(current))return msg('หน้านี้เป็นข้อมูลสรุป/ประวัติ ไม่เพิ่มโดยตรง',true);editRow({})}
 function opts(list,val,label){return `<option value="">-</option>`+(list||[]).map(x=>`<option value="${x.id}" ${x.id===val?'selected':''}>${esc(x[label]||x.id)}</option>`).join('')}
 function field(id,label,value='',type='text'){return `<div class="field"><label>${label}</label><input id="${id}" type="${type}" value="${esc(value)}"></div>`}
@@ -737,6 +729,7 @@ function select(id,label,html){return `<div class="field"><label>${label}</label
 function reasonField(){return `<div class="field" style="grid-column:1/-1"><label>เหตุผลการเพิ่ม/แก้ไข</label><textarea id="reason" required></textarea></div>`}
 function boolSelect(id,val){return `<option value="true" ${val!==false?'selected':''}>ใช้งาน</option><option value="false" ${val===false?'selected':''}>ปิดใช้งาน</option>`}
 function editRow(x){
+ if(current==='leaves'&&x.id)BA_UI.markRead(x.id);
  $('modal').classList.add('show');$('modalTitle').textContent=(x.id?'แก้ไข ':'เพิ่ม ')+tabs.find(t=>t[0]===current)[1];
  let html='';
  if(current==='employees')html=`<div class="grid">${field('employee_code','รหัสพนักงาน',x.employee_code)}${field('display_name','ชื่อแสดง',x.display_name)}${field('full_name','ชื่อ-นามสกุล',x.full_name)}${field('phone','โทรศัพท์',x.phone)}${field('line_user_id','LINE User ID',x.line_user_id)}${select('ba_mode','ประเภท BA',['FIXED_BRANCH','MULTI_BRANCH','STOCK_REFILL'].map(v=>`<option ${v===x.ba_mode?'selected':''}>${v}</option>`).join(''))}${select('assigned_office_id','สาขาประจำ',opts(DATA.offices,x.assigned_office_id,'office_name'))}${select('supervisor_id','Supervisor',opts(DATA.supervisors,x.supervisor_id,'supervisor_name'))}${select('default_shift_id','Shift ประจำ',opts(DATA.shifts,x.default_shift_id,'shift_name'))}${select('active','สถานะ',boolSelect('active',x.active))}${field('start_date','วันเริ่มงาน',x.start_date,'date')}${field('end_date','วันสิ้นสุด',x.end_date,'date')}${field('note','หมายเหตุ',x.note)}${reasonField()}</div>`;
