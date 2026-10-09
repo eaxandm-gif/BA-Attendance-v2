@@ -105,3 +105,23 @@ header{max-width:1200px;margin:24px auto 0;padding:24px 32px;background:var(--ca
 .admin-app .attendance-request-table [data-column=actions] button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;min-width:0;padding:5px 10px;margin:0 6px 0 0;font-size:14px;line-height:1.5;border-radius:10px;white-space:nowrap}
 .admin-app .attendance-request-table [data-column=actions] button:last-child{margin:0}
 @media(pointer:coarse){.admin-app .attendance-request-table [data-column=actions] button{min-height:44px}}
+
+/* BA cards share consistent edges, balanced grids, and full-width single actions. */
+#employeeView .attendance-layout{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:stretch}
+#employeeView .attendance-layout>.card{min-width:0;padding:24px;margin:0}
+#employeeView .clock-card{display:flex;flex-direction:column;align-items:center;justify-content:center}
+#employeeView .clock-card #actionGrid{width:100%;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#employeeView #actionGrid button:last-child:nth-child(odd){grid-column:1/-1}
+#employeeView .summary-details{grid-template-columns:repeat(2,minmax(0,1fr));margin:0;gap:0 20px}
+#employeeView .summary-details>div{min-width:0;padding:12px 0}
+#employeeView .summary-details>div:last-child:nth-child(odd){grid-column:1/-1}
+#employeeView .summary-details dt{min-height:22px}
+#employeeView .summary-details dd{line-height:1.5;overflow-wrap:break-word}
+#employeeView .attendance-layout .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:20px}
+#employeeView .attendance-layout .actions button{width:100%;margin:0}
+@media(min-width:721px){#employeeView>.app-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:0}#employeeView>.app-nav button{width:100%;justify-content:center;white-space:normal}}
+@media(max-width:1150px){#employeeView .attendance-layout{grid-template-columns:1fr}}
+@media(max-width:720px){#employeeView .attendance-layout{gap:16px}#employeeView .attendance-layout>.card{padding:18px}#employeeView .summary-details{gap:0 16px}#employeeView .attendance-layout .actions{grid-template-columns:1fr}}
+#portal>.profile-bar>.row{flex-wrap:nowrap;align-items:flex-start}
+#portal>.profile-bar>.row>div{flex:1;min-width:0}
+#portal>.profile-bar>.row>.badge{flex:0 0 auto}
