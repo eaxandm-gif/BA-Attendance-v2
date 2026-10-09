@@ -9,7 +9,7 @@
 <script src="attendance-review.js?v=4.7.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="ui.css?v=4.7.9">
+<link rel="stylesheet" href="ui.css?v=4.7.10">
 <script src="ui.js?v=4.7.0" defer></script>
 </head>
 <body class="admin-app">
@@ -29,7 +29,6 @@
     <div class="toolbar">
       <button id="createCurrentBtn" class="primary" onclick="createCurrent()">เพิ่มรายการ</button>
       <button id="bulkScheduleBtn" class="hidden" onclick="toggleScheduleEditMode()">เลือกหลายคน/หลายวัน</button>
-      <button onclick="refreshAll()">รีเฟรช</button>
       <select id="employeeStatusFilter" aria-label="สถานะพนักงาน" onchange="render()" style="max-width:200px"><option value="active">พนักงานที่ใช้งาน</option><option value="all">พนักงานทั้งหมด</option><option value="inactive">ปิดใช้งาน</option></select>
       <input id="search" placeholder="ค้นหา..." oninput="render()" style="max-width:300px">
       <input id="scheduleMonth" class="hidden" type="month" onchange="render()" style="max-width:180px">
@@ -554,11 +553,7 @@ function renderMonthlyEmployee(month){
   <td>${esc(r.first_in||'-')}</td><td>${esc(r.last_out||'-')}</td><td>${fmtMinutes(r.credited_minutes)}</td><td>${fmtMinutes(r.required_minutes)}</td>
   <td>${fmtMinutes(r.break_minutes)}</td><td>${fmtMinutes(r.refill_minutes)}</td><td class="${r.short_minutes>0?'late':''}">${fmtMinutes(r.short_minutes)}</td>
   <td class="${r.over_minutes>0?'ontime':''}">${r.over_minutes>0?fmtMinutes(r.over_minutes):'-'}</td><td>${esc(r.offices||'-')}</td><td>${esc(r.issue||'-')}</td></tr>`));
- $('content').innerHTML=`<section id="monthlyReport" class="monthly-report"><div class="report-display-tools"><button onclick="toggleReportFullscreen()">ขยาย / ออกจากรายงานเต็มจอ</button></div>${title}${kpis}${body}</section>`;
-}
-async function toggleReportFullscreen(){
- try{if(document.fullscreenElement)await document.exitFullscreen();else await $('monthlyReport').requestFullscreen();}
- catch(e){msg('เบราว์เซอร์นี้ไม่รองรับการขยายเต็มจอ กรุณาขยายหน้าต่างเบราว์เซอร์',true)}
+ $('content').innerHTML=`<section id="monthlyReport" class="monthly-report">${title}${kpis}${body}</section>`;
 }
 function renderMonthlyTotals(month,q){
  const supervisor=$('monthlySupervisor').value;

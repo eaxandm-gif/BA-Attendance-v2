@@ -89,3 +89,12 @@ header{max-width:1200px;margin:24px auto 0;padding:24px 32px;background:var(--ca
 .monthly-report:fullscreen{background:var(--page);padding:24px;overflow:auto;width:100%;height:100%}
 .report-display-tools{display:flex;justify-content:flex-end;margin:12px 0}
 .admin-app .monthly-employee-table th,.admin-app .monthly-employee-table td{font-size:14px;padding:10px 12px}
+
+/* Keep the main filter/action toolbar on a single desktop row. */
+@media(min-width:721px){
+ .admin-app .panel>.toolbar{display:flex;flex-wrap:nowrap;gap:8px;align-items:center}
+ .admin-app .panel>.toolbar input,.admin-app .panel>.toolbar select{flex:1 1 140px;min-width:0;max-width:none!important;width:0;font-size:13px;padding:8px}
+ .admin-app .panel>.toolbar #search{flex-basis:110px}
+ .admin-app .panel>.toolbar #monthlyView{flex-grow:1.4}
+ .admin-app .panel>.toolbar button{flex:0 0 auto;white-space:nowrap;padding:10px 12px;font-size:13px}
+}
