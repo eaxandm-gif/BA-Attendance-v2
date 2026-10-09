@@ -9,7 +9,7 @@
 <script src="attendance-review.js?v=4.7.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-<link rel="stylesheet" href="ui.css?v=4.7.5">
+<link rel="stylesheet" href="ui.css?v=4.7.6">
 <script src="ui.js?v=4.7.0" defer></script>
 </head>
 <body class="admin-app">
@@ -204,10 +204,14 @@ function tableColumnKind(header){
  return 'short';
 }
 function wideTable(headers,rows){
- const kinds=headers.map(tableColumnKind);
- return `<div class="table-wrap monthly-wide" tabindex="0" role="region" aria-label="รายงานรายเดือน ทุกคอลัมน์"><table><thead><tr>${headers.map((h,i)=>`<th data-column="${kinds[i]}">${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>{let i=0;return row.replace(/<td(?=[\s>])/g,()=>`<td data-column="${kinds[i++]||'short'}"`)}).join('')}</tbody></table></div>`;
+ const groups=[['วันที่ / กะ',['วันที่','สถานะ','Shift']],['เวลาทำงาน',['เข้า','ออก','เวลาทำงาน','เวลาที่ต้องทำ']],['พัก / เติมของ',['พัก','เติมของ']],['ขาด / OT',['ขาด','OT']],['สาขา / ปัญหา',['สาขา','ปัญหา']]];
+ return `<div class="table-wrap monthly-fit"><table><thead><tr>${groups.map(([label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>{
+  const template=document.createElement('template');template.innerHTML=`<table><tbody>${row}</tbody></table>`;
+  const cells=[...template.content.querySelectorAll('tr:first-child > td')];
+  const field=h=>{const cell=cells[headers.indexOf(h)];return `<div class="report-field"><span>${esc(h)}</span><div class="${esc(cell?.className||'')}">${cell?.innerHTML||'—'}</div></div>`};
+  return `<tr>${groups.map(([label,fields])=>`<td data-label="${label}">${fields.map(field).join('')}</td>`).join('')}</tr><tr class="report-events"><td colspan="5">${field('Event ลงเวลาทั้งหมด')}</td></tr>`;
+ }).join('')}</tbody></table></div>`;
 }
-let detailSequence=0;
 function table(headers,rows){
  const kinds=headers.map(tableColumnKind);
  const preferred=['รหัส','วันที่','เดือน','พนักงาน','ชื่อ','สถานะ','เข้า','ออก','OT','เกิน','ประเภท / เวลา','ประเภท','Event','เวลา','Action','สาขา','BA','WORK','OFF','SICK','HOL','INC'];
@@ -219,15 +223,12 @@ function table(headers,rows){
   const template=document.createElement('template');template.innerHTML=`<table><tbody>${row}</tbody></table>`;
   const cells=[...template.content.querySelectorAll('tr:first-child > td')];
   if(!cells.length)return '';
-  const id=`row-detail-${++detailSequence}`;
   const value=i=>cells[i]?.innerHTML||'—';
   const main=primary.map(i=>`<td data-column="${kinds[i]}" data-label="${esc(headers[i])}"><div class="cell-value ${esc(cells[i]?.className||'')}">${value(i)}</div></td>`).join('');
-  const details=secondary.length?`<td data-label="รายละเอียด"><button aria-expanded="false" aria-controls="${id}" onclick="toggleRowDetails(this)">ดูรายละเอียด</button></td>`:'';
-  return `<tr>${main}${details}</tr>`+(secondary.length?`<tr id="${id}" class="record-detail" hidden><td colspan="${primary.length+1}"><dl class="record-fields">${secondary.map(i=>`<div><dt>${esc(headers[i])}</dt><dd>${value(i)}</dd></div>`).join('')}</dl></td></tr>`:'');
+  return `<tr>${main}</tr>`+(secondary.length?`<tr class="record-detail"><td colspan="${primary.length}"><dl class="record-fields">${secondary.map(i=>`<div><dt>${esc(headers[i])}</dt><dd>${value(i)}</dd></div>`).join('')}</dl></td></tr>`:'');
  }).join('');
- return `<div class="table-wrap compact-records"><table><thead><tr>${primary.map(i=>`<th>${esc(headers[i])}</th>`).join('')}${secondary.length?'<th>รายละเอียด</th>':''}</tr></thead><tbody>${rendered}</tbody></table></div>`;
+ return `<div class="table-wrap compact-records"><table><thead><tr>${primary.map(i=>`<th>${esc(headers[i])}</th>`).join('')}</tr></thead><tbody>${rendered}</tbody></table></div>`;
 }
-function toggleRowDetails(button){const row=document.getElementById(button.getAttribute('aria-controls'));if(!row)return;row.hidden=!row.hidden;button.setAttribute('aria-expanded',String(!row.hidden));button.textContent=row.hidden?'ดูรายละเอียด':'ซ่อนรายละเอียด';}
 
 function localDateISO(d){const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,'0');const day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`}
 function daysInMonth(month){const [y,m]=month.split('-').map(Number);return new Date(y,m,0).getDate()}
@@ -757,7 +758,7 @@ function render(){
  if(current==='attendance')return $('content').innerHTML=`<div class="status">ช่วง ${esc($('attendanceFrom').value)} ถึง ${esc($('attendanceTo').value)} · ${rows.length} รายการ${attendanceLoading?' · กำลังโหลด...':''}</div>`+table(['เวลา','พนักงาน','Event','สาขา','Source','จัดการ'],rows.map(x=>`<tr><td>${esc(new Date(x.occurred_at).toLocaleString('th-TH-u-ca-gregory',{timeZone:'Asia/Bangkok'}))}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(x.event_type)}</td><td>${esc(x.offices?.office_name)}</td><td>${esc(x.source)}</td><td>${buttons(x)}</td></tr>`));
  if(current==='leaves')return $('content').innerHTML=table(['วันที่','พนักงาน','ประเภท','เหตุผล','สถานะ','ผู้อนุมัติ','จัดการ'],rows.map(x=>`<tr><td>${esc(x.leave_date)}</td><td>${esc(x.employees?.employee_code)} ${esc(x.employees?.display_name)}</td><td>${esc(BA_UI.label(x.leave_type))}</td><td>${esc(x.reason)}</td><td>${esc(BA_UI.label(x.status))}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${buttons(x)}</td></tr>`));
  if(current==='line_logs')return $('content').innerHTML=table(['วันที่','ประเภท','Supervisor','สถานะ','ข้อความ','Error'],rows.map(x=>`<tr><td>${esc(x.report_date)}</td><td>${esc(x.report_type)}</td><td>${esc(x.supervisors?.supervisor_name)}</td><td>${esc(BA_UI.label(x.status))}</td><td style="white-space:pre-wrap">${esc(x.message)}</td><td>${esc(x.error)}</td></tr>`));
- if(current==='audits')return $('content').innerHTML=table(['เวลา','Action','Entity','ID','เหตุผล','ก่อน','หลัง'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)}</td><td>${esc(x.entity_id)}</td><td>${esc(x.reason)}</td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.before_data,null,2))}</pre></details></td><td><details><summary>ดู</summary><pre>${esc(JSON.stringify(x.after_data,null,2))}</pre></details></td></tr>`));
+ if(current==='audits')return $('content').innerHTML=table(['เวลา','Action','Entity','ID','เหตุผล','ก่อน','หลัง'],rows.map(x=>`<tr><td>${esc(x.created_at)}</td><td>${esc(x.action)}</td><td>${esc(x.entity_type)}</td><td>${esc(x.entity_id)}</td><td>${esc(x.reason)}</td><td><details open><summary>ข้อมูล</summary><pre>${esc(JSON.stringify(x.before_data,null,2))}</pre></details></td><td><details open><summary>ข้อมูล</summary><pre>${esc(JSON.stringify(x.after_data,null,2))}</pre></details></td></tr>`));
 }
 function buttons(x){return `<button onclick='editRow(${esc(JSON.stringify(x))})'>แก้</button> <button class="danger" onclick='deleteRow(${esc(JSON.stringify(x))})'>ลบ</button>`}
 function createCurrent(){if(['registrations','daily','monthly','line_logs','audits'].includes(current))return msg('หน้านี้เป็นข้อมูลสรุป/ประวัติ ไม่เพิ่มโดยตรง',true);editRow({})}
