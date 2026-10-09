@@ -125,3 +125,17 @@ header{max-width:1200px;margin:24px auto 0;padding:24px 32px;background:var(--ca
 #portal>.profile-bar>.row{flex-wrap:nowrap;align-items:flex-start}
 #portal>.profile-bar>.row>div{flex:1;min-width:0}
 #portal>.profile-bar>.row>.badge{flex:0 0 auto}
+
+/* Employee menu destinations are document pages, with iOS-safe form widths. */
+#employeeView .employee-page{width:100%;margin:0;padding:24px}
+.employee-page .page-back{margin-bottom:20px}
+.employee-page-body,.employee-page-body .item,.employee-page-body .field{min-width:0;max-width:100%;box-sizing:border-box}
+.employee-page-body input,.employee-page-body select,.employee-page-body textarea{display:block;box-sizing:border-box;min-width:0!important;width:100%;max-width:100%;margin-inline:0}
+.employee-page-body input[type=date],.employee-page-body input[type=time]{appearance:none;-webkit-appearance:none;min-height:48px}
+.employee-page-body input::-webkit-date-and-time-value{text-align:left;min-width:0}
+.employee-page-body .month-nav{display:grid;grid-template-columns:1fr auto 1fr;gap:8px}
+.employee-page-body .month-nav button{padding:8px;min-width:0}
+.employee-page-body .day-grid{gap:4px}
+.employee-page-body .day{min-width:0;min-height:64px;padding:8px 0;font-size:12px}
+.employee-page-body>.row{align-items:center;gap:12px}
+@media(max-width:720px){#employeeView .employee-page{padding:16px}.employee-page-body .grid{grid-template-columns:1fr}.employee-page-body .item{padding:12px}.employee-page-body .month-nav .title{font-size:16px}.employee-page-body .month-nav button{font-size:13px}.employee-page-body .title{margin-bottom:12px}}
