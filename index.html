@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <!-- BA Attendance frontend v4.7.0 ATOMIC_ATTENDANCE_ORDER -->
+  <!-- BA Attendance frontend v4.7.1 ATOMIC_ATTENDANCE_ORDER -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>BA Attendance</title>
@@ -118,7 +118,7 @@ async function init(){
       $('portal').classList.remove('hidden');
       $('name').textContent=session.profile.name;
       $('role').textContent='BA · โหมดลงเวลาภายนอก LINE';
-      $('version').textContent='v4.7.0';
+      $('version').textContent='v4.7.1';
       await renderExternalEmployeeHome();
       return;
     }
@@ -136,7 +136,7 @@ async function init(){
     $('name').textContent=session.profile.name||p?.displayName||'ผู้ใช้งาน';
     $('role').textContent=session.profile.role==='SUPERVISOR'?'หัวหน้างาน':'BA';
     if(session.profile.role==='EMPLOYEE'){const button=document.createElement('button');button.className='profile-action';button.setAttribute('aria-label','ข้อมูลของฉัน');if(p?.pictureUrl){const image=document.createElement('img');image.src=p.pictureUrl;image.alt='รูปโปรไฟล์';button.appendChild(image);}else button.textContent='ข้อมูลของฉัน';button.onclick=showMyProfile;document.querySelector('header').appendChild(button);}
-    $('version').textContent='v4.7.0';
+    $('version').textContent='v4.7.1';
     session.profile.role==='SUPERVISOR'?renderSupervisorHome():renderEmployeeHome();
   }catch(e){
     const msg=String(e.message||e);
@@ -489,7 +489,7 @@ async function submitAttendance(type){
     const intent=pending||{type,request_key:crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`};
     savePendingAttendance(intent);
     await appRequest('submit_attendance',{
-      ...intent,latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy
+      ...intent,latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy,location_timestamp:p.timestamp
     });
     committed=true;
     savePendingAttendance(null);
@@ -503,7 +503,7 @@ async function submitAttendance(type){
       showLocationRetryError('ยังไม่ได้อนุญาตให้ใช้ตำแหน่ง กรุณาเปิด Location และ Precise Location หรือส่งคำขอให้ตรวจสอบ',type);
     }else if(typeof e?.code==='number'){
       showLocationRetryError(geolocationErrorMessage(e),type);
-    }else if(['GPS_ACCURACY','GPS_OUTSIDE'].includes(e?.code)){
+    }else if(['GPS_ACCURACY','GPS_OUTSIDE','GPS_STALE','GPS_INVALID','GPS_OFFICE_UNAVAILABLE'].includes(e?.code)){
       savePendingAttendance(null); gpsOfficeId=e.office_id;
       showLocationRetryError('เครื่องยังยืนยันตำแหน่งไม่ได้ หากอยู่ที่สาขาแล้ว สามารถส่งคำขอให้ตรวจสอบเวลาได้',type);
     }else if(e?.status>=400&&e.status<500){
@@ -1067,7 +1067,7 @@ async function renderRegistrationStart(profileId){
   $('portal').classList.remove('hidden');
   $('name').textContent='ลงทะเบียน BA';
   $('role').textContent='รอแอดมินอนุมัติ';
-  $('version').textContent='v4.7.0';
+  $('version').textContent='v4.7.1';
   let r=null, options={supervisors:[]};
   try{r=await appRequest('public_ba_registration_status')}catch(e){}
   try{options=await appRequest('public_registration_options')}catch(e){}
@@ -1143,7 +1143,7 @@ async function renderMobileAdmin(){
   $('portal').classList.remove('hidden');
   $('name').textContent='Mobile Admin';
   $('role').textContent='จัดการระบบผ่าน LIFF';
-  $('version').textContent='v4.7.0';
+  $('version').textContent='v4.7.1';
 
   const adminKey=localStorage.getItem('BA_ADMIN_KEY')||prompt('กรอก Admin API Key');
   if(!adminKey){notice('ต้องกรอก Admin API Key','error');return}
