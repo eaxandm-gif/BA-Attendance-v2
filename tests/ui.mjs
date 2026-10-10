@@ -5,6 +5,9 @@ dom.window.eval(read('ui.js'));assert.equal(dom.window.document.querySelector('o
 await new Promise(resolve=>setTimeout(resolve,50));dom.window.dispatchEvent(new dom.window.Event('beforeunload'));dom.window.close();
 console.log('PASS Thai display labels preserve internal option values and associate form labels');
 const index=read('index.html'),source=[...index.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n');
+assert.doesNotMatch(index,/<dt>พักรวม/);
+assert.match(index,/<dt>ออกพัก<\/dt>/);
+assert.match(index,/<dt>กลับจากพัก<\/dt>/);
 const home=new JSDOM('<main id="employeeView"></main>',{runScripts:'outside-only',pretendToBeVisual:true,url:'https://example.test'});home.window.eval(read('ui.js'));home.window.eval(source.replace("window.addEventListener('load',init)",''));
 for(const [mode,actions] of [['FIXED_BRANCH',['BREAK_OUT']],['MULTI_BRANCH',['BRANCH_IN','DAY_OUT']],['STOCK_REFILL',['REFILL_IN','WORK_OUT']]]){home.window.eval(`paintEmployeeHome(${JSON.stringify({state:{label:'IN'},allowed_actions:actions,timeline:[],summary:{credited_minutes:0}})})`);assert.equal(home.window.document.querySelectorAll('#actionGrid button').length,actions.length);}
 home.window.eval("paintEmployeeHome({state:{label:'OUT'},allowed_actions:[],timeline:[]})");assert.equal(home.window.document.querySelectorAll('#actionGrid button').length,0);assert.match(home.window.document.body.textContent,/ยังไม่มีข้อมูล/);await new Promise(resolve=>setTimeout(resolve,50));home.window.dispatchEvent(new home.window.Event('beforeunload'));home.window.close();
